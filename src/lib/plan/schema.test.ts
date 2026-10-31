@@ -8,7 +8,7 @@ function day(date: string, rest: boolean) {
   return {
     date,
     is_rest_day: rest,
-    meals: [{ slot: "breakfast", recipe_id: R, servings: 1 }],
+    meals: [{ slot: "breakfast", meal_idea_id: R, portion: "light" }],
     workout: rest
       ? null
       : {
@@ -19,7 +19,7 @@ function day(date: string, rest: boolean) {
           blocks: [{ exercise_id: E, sets: 3, reps: 10, rest_seconds: 60 }],
           why: "מחזק רגליים, חזה וגב בזמן קצר",
         },
-    habits: [{ type: "water", title: "שתייה", target: "8 כוסות" }],
+    habits: [{ type: "water", title: "שתייה", target: "שתייה לאורך היום" }],
   };
 }
 
@@ -39,7 +39,7 @@ describe("weeklyPlanSchema", () => {
 
   it("rejects free-text meals that are not library references", () => {
     const bad = structuredClone(valid) as Record<string, unknown> & typeof valid;
-    (bad.days[0].meals[0] as Record<string, unknown>).recipe_id = "שקשוקה";
+    (bad.days[0].meals[0] as Record<string, unknown>).meal_idea_id = "שקשוקה";
     expect(weeklyPlanSchema.safeParse(bad).success).toBe(false);
   });
 

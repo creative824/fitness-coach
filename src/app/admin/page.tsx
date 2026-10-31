@@ -24,7 +24,7 @@ async function AdminHome() {
   const c = await contentCounts();
   const tiles = [
     { href: "/admin/exercises?status=draft", label: t.admin.nav.exercises, ...c.exercises },
-    { href: "/admin/recipes?status=draft", label: t.admin.nav.recipes, ...c.recipes },
+    { href: "/admin/meals?status=draft", label: t.admin.nav.meals, ...c.meals },
   ];
   return (
     <>

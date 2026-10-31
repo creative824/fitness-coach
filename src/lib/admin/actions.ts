@@ -6,14 +6,15 @@ import { z } from "zod";
 import { MUSCLES } from "@/content/muscles";
 import { EQUIPMENT } from "@/lib/onboarding/schema";
 import { createClient } from "@/lib/supabase/server";
+import type { ContentTable } from "./content";
 import { requireAdmin } from "./guard";
 
 const status = z.enum(["draft", "approved", "retired"]);
 const uuid = z.uuid();
 
-export async function setReviewStatus(table: "exercises" | "recipes", id: string, next: string) {
+export async function setReviewStatus(table: ContentTable, id: string, next: string) {
   const admin = await requireAdmin();
-  const parsed = z.object({ table: z.enum(["exercises", "recipes"]), id: uuid, next: status }).parse({ table, id, next });
+  const parsed = z.object({ table: z.enum(["exercises", "meal_ideas"]), id: uuid, next: status }).parse({ table, id, next });
   const supabase = await createClient();
   const { error } = await supabase
     .from(parsed.table)
@@ -24,7 +25,7 @@ export async function setReviewStatus(table: "exercises" | "recipes", id: string
     })
     .eq("id", parsed.id);
   if (error) throw new Error(error.message);
-  revalidatePath(`/admin/${parsed.table}`);
+  revalidatePath(parsed.table === "meal_ideas" ? "/admin/meals" : "/admin/exercises");
 }
 
 const muscleIds = MUSCLES.map((m) => m.id) as [string, ...string[]];

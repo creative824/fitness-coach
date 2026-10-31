@@ -1,8 +1,8 @@
 /**
  * Weekly plan contract (spec §7). The AI must return JSON matching this schema.
  *
- * Key rule: the AI picks and arranges; it does not invent. Meals reference `recipe_id`
- * and workouts reference `exercise_id` from the approved libraries. Numbers that matter
+ * Key rule: the AI picks and arranges; it does not invent. Meals reference `meal_idea_id`
+ * (a simple idea such as "a salad with nuts", never a recipe with amounts) and workouts reference `exercise_id` from the approved libraries. Numbers that matter
  * for safety (calorie range, water target, points) are computed in code, not by the model.
  * A plan that fails schema or consistency checks is sent back for repair and never shown.
  */
@@ -16,8 +16,8 @@ export const DAY_INDEXES = [0, 1, 2, 3, 4, 5, 6] as const; // 0 = Sunday
 
 export const mealSchema = z.object({
   slot: z.enum(["breakfast", "lunch", "dinner", "snack"]),
-  recipe_id: uuid,
-  servings: z.number().positive().max(4),
+  meal_idea_id: uuid,
+  portion: z.enum(["light", "regular"]),
   alternatives: z.array(uuid).max(3).default([]),
 });
 
@@ -68,7 +68,8 @@ export const weeklyPlanSchema = z.object({
   targets: z.object({
     // Filled from code (src/lib/plan/targets.ts, phase 3), copied here for display.
     calories_range: z.tuple([z.int(), z.int()]).nullable(), // null when not appropriate (e.g. safety flag)
-    water_ml: z.int().min(0).max(5000),
+    // Personal daily water target, logged fill by fill (src/lib/water). Null under a medical restriction.
+    water_ml: z.int().min(0).max(5000).nullable(),
     workouts_per_week: z.int().min(0).max(7),
   }),
   days: z.array(daySchema).length(7),

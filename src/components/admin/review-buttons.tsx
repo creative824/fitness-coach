@@ -1,12 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { setReviewStatus } from "@/lib/admin/actions";
-import type { ReviewStatus } from "@/lib/admin/content";
+import type { ContentTable, ReviewStatus } from "@/lib/admin/content";
 import { getDictionary } from "@/lib/i18n/he";
 
 const t = getDictionary();
 
 /** Server-action buttons: approve / retire / back to draft. */
-export function ReviewButtons({ table, id, status }: { table: "exercises" | "recipes"; id: string; status: ReviewStatus }) {
+export function ReviewButtons({ table, id, status }: { table: ContentTable; id: string; status: ReviewStatus }) {
   const to = (next: ReviewStatus) => setReviewStatus.bind(null, table, id, next);
   return (
     <div className="flex flex-wrap gap-2">

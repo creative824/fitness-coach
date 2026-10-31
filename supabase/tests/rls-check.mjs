@@ -110,8 +110,25 @@ check("a task cannot be completed (scored) twice", Boolean(r.error));
 r = await as(A, "select count(*)::int as n from feature_flags where enabled");
 check("billing and premium gating flags start OFF", r.rows?.[0].n === 0);
 
-r = await db.query("select (select count(*) from exercises)::int as e, (select count(*) from recipes)::int as r, (select count(*) from muscles)::int as m");
-check("content seed loads idempotently", r.rows[0].e > 40 && r.rows[0].r > 20 && r.rows[0].m === 14);
+r = await db.query("select (select count(*) from exercises)::int as e, (select count(*) from meal_ideas)::int as r, (select count(*) from muscles)::int as m");
+check("content seed loads idempotently", r.rows[0].e > 40 && r.rows[0].r > 30 && r.rows[0].m === 14);
+
+r = await as(B, "select count(*)::int as n from meal_ideas");
+check("seeded meal ideas stay hidden until approved", r.rows?.[0].n === 0);
+
+r = await db
+  .query("insert into meal_ideas (slug, title_he, hint_he) values ('x', 'יוגורט', 'מאתיים גרם 200')")
+  .then(() => ({}), (e) => ({ error: e.message }));
+check("meal ideas cannot carry amounts (no digits)", Boolean(r.error));
+
+r = await as(A, `insert into water_logs (user_id, date, amount_ml) values ('${A}', '2026-11-01', 500) returning 1`);
+check("user logs own water fill", r.rows?.length === 1);
+
+r = await as(B, `insert into water_logs (user_id, date, amount_ml) values ('${A}', '2026-11-01', 500)`);
+check("user cannot log water for another user", Boolean(r.error));
+
+r = await as(B, "select count(*)::int as n from water_logs");
+check("user cannot read another user's water log", r.rows?.[0].n === 0);
 
 r = await as(B, "select count(*)::int as n from exercises where slug = 'plank'");
 check("seeded exercises stay hidden until approved", r.rows?.[0].n === 0);

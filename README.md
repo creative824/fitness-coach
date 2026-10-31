@@ -2,7 +2,7 @@
 
 פלטפורמת PWA בעברית למאמן אישי בכושר, תזונה והרגלים. המשתמש ממלא שאלון, מקבל תוכנית שבועית, ובכל יום מסמן משימות, צובר נקודות ורואה התקדמות.
 
-**סטטוס:** שלב 1 (הרשמה ושאלון). פרטים ב-[docs/TECH_PLAN.md](docs/TECH_PLAN.md). הגדרת Supabase: [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md).
+**סטטוס:** שלב 2 (ספריית תרגילים, רעיונות לארוחות, מנגנון מים). פרטים ב-[docs/TECH_PLAN.md](docs/TECH_PLAN.md). הגדרת Supabase: [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md).
 
 ## הרצה מקומית
 

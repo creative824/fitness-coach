@@ -8,7 +8,7 @@ const t = getDictionary();
 const items = [
   { href: "/admin", label: t.admin.nav.home },
   { href: "/admin/exercises", label: t.admin.nav.exercises },
-  { href: "/admin/recipes", label: t.admin.nav.recipes },
+  { href: "/admin/meals", label: t.admin.nav.meals },
 ];
 
 export function AdminNav() {

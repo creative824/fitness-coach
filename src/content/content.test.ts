@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EQUIPMENT } from "@/lib/onboarding/schema";
 import { EXERCISES } from "./exercises";
 import { MUSCLES } from "./muscles";
-import { RECIPES, type Allergen } from "./recipes";
+import { MEAL_IDEAS, type Allergen } from "./meal-ideas";
 
 const muscleIds = new Set<string>(MUSCLES.map((m) => m.id));
 
@@ -43,43 +43,57 @@ describe("exercise library", () => {
   });
 });
 
-/** Ingredient keywords that imply an allergen. A recipe must declare every allergen its ingredients imply. */
+/** Words that imply an allergen. An idea must declare every allergen its text implies. */
 const ALLERGEN_HINTS: [RegExp, Allergen][] = [
   [/טחינה|חומוס מוכן|שומשום/, "sesame"],
-  [/יוגורט|קוטג׳|גבינ|חמאה(?! בוטנים)|שמנת|(?<!משקה שיבולת שועל או )חלב/, "milk"],
-  [/ביצ/, "egg"],
-  [/לחם|פיתה|פסטה|שיבולת שועל|קמח|בורגול|קוסקוס/, "gluten"],
+  [/יוגורט|קוטג׳|גבינ|חמאה(?! בוטנים)|שמנת|חלב/, "milk"],
+  [/ביצ|חביתה|שקשוקה/, "egg"],
+  [/לחם|פיתה|פסטה|שיבולת שועל|קמח|בורגול|קוסקוס|טוסט|גרנולה/, "gluten"],
   [/טופו|סויה|אדממה/, "soy"],
   [/סלמון|טונה|דג/, "fish"],
   [/בוטנים/, "peanut"],
   [/אגוז|שקד|קשיו/, "tree_nut"],
 ];
 
-describe("recipe library", () => {
+const text = (m: (typeof MEAL_IDEAS)[number]) => `${m.title_he} | ${m.hint_he ?? ""}`;
+
+describe("meal ideas library", () => {
   it("has unique slugs", () => {
-    expect(new Set(RECIPES.map((r) => r.slug)).size).toBe(RECIPES.length);
+    expect(new Set(MEAL_IDEAS.map((r) => r.slug)).size).toBe(MEAL_IDEAS.length);
   });
 
-  it.each(RECIPES.map((r) => [r.slug, r] as const))("%s declares every allergen its ingredients imply", (_, r) => {
-    const text = r.ingredients.map((i) => i.name_he).join(" | ");
+  it.each(MEAL_IDEAS.map((m) => [m.slug, m] as const))("%s is an idea, not a recipe", (_, m) => {
+    // No amounts, units, times or steps: the product gives ideas only.
+    expect(text(m)).not.toMatch(/[0-9]|גרם|מ"ל|כפית|כפות|(^|\s)כף(\s|$)|כוס|דקות|מנות|קלוריות|שלב/);
+    expect(m.title_he.length).toBeLessThanOrEqual(40);
+    expect((m.hint_he ?? "").length).toBeLessThanOrEqual(60);
+  });
+
+  it.each(MEAL_IDEAS.map((m) => [m.slug, m] as const))("%s declares every allergen its text implies", (_, m) => {
     for (const [re, allergen] of ALLERGEN_HINTS) {
-      if (re.test(text)) expect(r.allergens, `${allergen} in ${r.slug}`).toContain(allergen);
+      if (re.test(text(m))) expect(m.allergens, `${allergen} in ${m.slug}`).toContain(allergen);
     }
   });
 
-  it("keeps vegan recipes free of animal allergens and meat dishes free of dairy", () => {
-    for (const r of RECIPES) {
-      if (r.diet.includes("vegan")) expect(r.allergens.filter((a) => ["milk", "egg", "fish", "shellfish"].includes(a))).toEqual([]);
-      if (r.diet.includes("kosher_meat")) expect(r.allergens).not.toContain("milk");
-      if (r.diet.includes("kosher_meat")) expect(r.diet).not.toContain("vegetarian");
+  it("keeps vegan ideas free of animal allergens and meat ideas free of dairy", () => {
+    for (const m of MEAL_IDEAS) {
+      if (m.diet.includes("vegan")) expect(m.allergens.filter((a) => ["milk", "egg", "fish", "shellfish"].includes(a))).toEqual([]);
+      if (m.diet.includes("kosher_meat")) expect(m.allergens).not.toContain("milk");
+      if (m.diet.includes("kosher_meat")) expect(m.diet).not.toContain("vegetarian");
     }
   });
 
-  it("has options for every meal and for common restrictions", () => {
-    for (const m of ["breakfast", "lunch", "dinner", "snack"] as const) {
-      expect(RECIPES.filter((r) => r.meal_type.includes(m)).length, m).toBeGreaterThanOrEqual(4);
-      expect(RECIPES.some((r) => r.meal_type.includes(m) && r.diet.includes("vegan")), `vegan ${m}`).toBe(true);
-      expect(RECIPES.some((r) => r.meal_type.includes(m) && !r.allergens.includes("gluten")), `gluten-free ${m}`).toBe(true);
+  it("has light and common-restriction options for every meal", () => {
+    for (const meal of ["breakfast", "lunch", "dinner", "snack"] as const) {
+      const of = MEAL_IDEAS.filter((m) => m.meal_type.includes(meal));
+      expect(of.length, meal).toBeGreaterThanOrEqual(5);
+      expect(of.some((m) => m.portion === "light"), `light ${meal}`).toBe(true);
+      expect(of.some((m) => m.diet.includes("vegan")), `vegan ${meal}`).toBe(true);
+      expect(of.some((m) => !m.allergens.includes("gluten")), `gluten-free ${meal}`).toBe(true);
+      expect(of.some((m) => m.allergens.length === 0 || (m.allergens.length === 1 && m.allergens[0] === "tree_nut")), `low-allergen ${meal}`).toBe(true);
+    }
+    for (const meal of ["breakfast", "lunch", "dinner"] as const) {
+      expect(MEAL_IDEAS.some((m) => m.meal_type.includes(meal) && m.portion === "regular"), `regular ${meal}`).toBe(true);
     }
   });
 });

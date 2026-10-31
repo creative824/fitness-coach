@@ -137,7 +137,7 @@ export const he = {
   },
 
   admin: {
-    nav: { home: "סקירה", exercises: "תרגילים", recipes: "מתכונים" },
+    nav: { home: "סקירה", exercises: "תרגילים", meals: "רעיונות לארוחות" },
     statuses: { draft: "טיוטה", approved: "מאושר", retired: "הוצא משימוש" },
     all: "הכול",
     approve: "לאשר",
@@ -150,7 +150,7 @@ export const he = {
     approvedCount: "מאושרים",
     reviewNote:
       "תוכן חדש נכנס כטיוטה. רק תוכן מאושר משמש לבניית תוכניות. עריכה מחזירה את הפריט לטיוטה, כדי שיאושר מחדש.",
-    reviewerNote: "את התרגילים מומלץ שיאשר מאמן/ת מוסמך/ת, ואת המתכונים דיאטן/ית.",
+    reviewerNote: "את התרגילים מומלץ שיאשר מאמן/ת מוסמך/ת, ואת רעיונות הארוחות דיאטן/ית.",
     empty: "אין פריטים בסטטוס הזה.",
     exercise: {
       name: "שם",
@@ -176,15 +176,15 @@ export const he = {
         supine: "הימנעות משכיבה ממושכת על הגב",
       },
     },
-    recipe: {
-      ingredients: "רכיבים",
-      steps: "הכנה",
-      prep: "דקות הכנה",
-      servings: "מנות",
+    meal: {
+      note: "רעיונות בלבד, בלי מתכונים: בלי כמויות, בלי שלבי הכנה ובלי מספרי קלוריות.",
       allergens: "אלרגנים",
       noAllergens: "ללא אלרגנים מהרשימה",
       diet: "התאמה",
+      components: "מה יש בצלחת",
       mealTypes: { breakfast: "בוקר", lunch: "צהריים", dinner: "ערב", snack: "ביניים" },
+      portions: { light: "קטנה", regular: "רגילה" },
+      componentNames: { protein: "חלבון", vegetables: "ירקות", carbs: "פחמימה", fat: "שומן טוב", fruit: "פרי" },
       diets: {
         vegetarian: "צמחוני",
         vegan: "טבעוני",
@@ -193,9 +193,25 @@ export const he = {
         kosher_meat: "כשר בשרי",
         kosher_parve: "כשר פרווה",
       },
-      nutritionMissing: "ערכים תזונתיים עוד לא חושבו ממאגר מזון מוסמך, ולכן לא יוצגו למשתמשים.",
-      units: { g: "גרם", ml: "מ\"ל", unit: "יח׳", tbsp: "כף", tsp: "כפית", cup: "כוס", pinch: "קורט" },
     },
+  },
+
+  water: {
+    title: "מים",
+    howItWorks: "בכל פעם שסיימת כוס או בקבוק, לוחצים +1. היעד מחולק לאורך היום כדי שלא תצטרך לשתות הרבה בבת אחת.",
+    add: "+1 מילוי",
+    undo: "ביטול המילוי האחרון",
+    vesselLabel: "ממה אני שותה",
+    vessels: { "250": "כוס", "330": "כוס גדולה", "500": "בקבוק קטן", "750": "בקבוק", "1000": "בקבוק ליטר" },
+    progress: (done: number, total: number) => `${done} מתוך ${total}`,
+    status: {
+      ahead: "מקדים את הקצב, יפה",
+      on_track: "בקצב טוב",
+      behind: "קצת מאחור. זה זמן טוב למלא",
+      done: "השלמת את היעד להיום",
+    },
+    nextAt: (time: string) => `המילוי הבא בערך ב-${time}`,
+    noTarget: "בגלל ההגבלה הרפואית שציינת, לא נקבע יעד שתייה. כדאי לפעול לפי הנחיית הרופא/ה. אפשר עדיין לרשום כל מילוי.",
   },
 
   legal: {

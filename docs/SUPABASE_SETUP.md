@@ -1,7 +1,7 @@
 # Supabase setup
 
 1. **Schema**: run every file in `supabase/migrations/` in order (SQL Editor → New query → Run).
-   Then run `supabase/seed/content.sql` to load the exercise and recipe library as drafts.
+   Then run `supabase/seed/content.sql` to load the exercise library and the meal ideas as drafts (ideas only, no recipes).
    The seed is safe to re-run: it updates content by slug and never changes approval status.
    After editing `src/content/*.ts`, regenerate it with `npm run seed:gen`.
 2. **Environment** (local `.env.local` and Vercel → Settings → Environment Variables):
