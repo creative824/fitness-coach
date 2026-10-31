@@ -15,25 +15,26 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <Card className="flex flex-col items-center gap-3 py-10 text-center">
+    <Card className="relative flex flex-col items-center gap-3 overflow-hidden px-6 py-10 text-center">
       {icon ? (
-        <div className="flex size-14 items-center justify-center rounded-full bg-accent-soft text-brand">
+        <div className="relative mb-1 flex size-16 items-center justify-center rounded-xl bg-night text-accent shadow-[var(--shadow-float)] [&_svg]:size-7">
           {icon}
         </div>
       ) : null}
-      <h2 className="text-lg font-bold">{title}</h2>
-      <p className="max-w-sm text-ink-muted">{body}</p>
-      {action ? <div className="mt-2">{action}</div> : null}
+      <h2 className="relative text-xl font-semibold">{title}</h2>
+      <p className="relative max-w-sm leading-relaxed text-ink-muted">{body}</p>
+      {action ? <div className="relative mt-3">{action}</div> : null}
     </Card>
   );
 }
 
 export function LoadingState({ label }: { label: string }) {
   return (
-    <div role="status" aria-live="polite" className="flex flex-col gap-3">
+    <div role="status" aria-live="polite" className="flex flex-col gap-4">
       <span className="sr-only">{label}</span>
-      {[0, 1, 2].map((i) => (
-        <div key={i} className="h-20 animate-pulse rounded-[var(--radius-card)] bg-line/60" />
+      <div className="h-44 animate-pulse rounded-[var(--radius-card)] bg-night/10" />
+      {[0, 1].map((i) => (
+        <div key={i} className="h-20 animate-pulse rounded-[var(--radius-card)] bg-white/70" />
       ))}
     </div>
   );
@@ -49,8 +50,8 @@ export function ErrorState({
   action?: ReactNode;
 }) {
   return (
-    <Card role="alert" className="flex flex-col items-center gap-3 border-danger/30 bg-danger-soft py-10 text-center">
-      <h2 className="text-lg font-bold text-danger">{title}</h2>
+    <Card role="alert" className="flex flex-col items-center gap-3 py-10 text-center ring-1 ring-danger/20">
+      <h2 className="text-lg font-semibold text-danger">{title}</h2>
       <p className="max-w-sm text-ink">{body}</p>
       {action}
     </Card>
