@@ -23,3 +23,15 @@ export function authErrorMessage(code: string | undefined | null): string {
   };
   return e[map[code ?? ""] ?? "generic"];
 }
+
+/**
+ * Like authErrorMessage, but an unrecognised error carries a short reference
+ * (Supabase code, HTTP status or error type) so the cause can be diagnosed from a screenshot.
+ * The reference never contains user data.
+ */
+export function authErrorWithRef(err: { code?: string; status?: number; name?: string }): string {
+  const msg = authErrorMessage(err.code);
+  if (msg !== getDictionary().auth.errors.generic) return msg;
+  const ref = [err.code, err.status, err.name].filter((x) => x !== undefined && x !== "" && x !== 0).join(" · ");
+  return ref ? `${msg} (${ref})` : msg;
+}
