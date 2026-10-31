@@ -25,6 +25,11 @@ for (const file of fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).sort())
   await db.exec(fs.readFileSync(new URL(file, dir), "utf8"));
 }
 
+// Content seed must apply cleanly on top of the migrations, twice (idempotent).
+const seed = fs.readFileSync(new URL("../seed/content.sql", import.meta.url), "utf8");
+await db.exec(seed);
+await db.exec(seed);
+
 // Supabase grants table privileges to `authenticated`; RLS is what restricts rows.
 await db.exec(`
   grant usage on schema public to authenticated;
@@ -92,7 +97,7 @@ r = await as(B, "select slug from exercises");
 check("users see approved exercises only", r.rows?.length === 1 && r.rows[0].slug === "pushup");
 
 r = await as(B, "select slug from exercises", { role: "admin" });
-check("admin (server-set app_metadata) sees drafts", r.rows?.length === 2);
+check("admin (server-set app_metadata) sees drafts", r.rows?.some((x) => x.slug === "draft-one") && r.rows.length > 2);
 
 r = await as(B, "select count(*)::int as n from knowledge_sources");
 check("knowledge sources are not readable by users", r.rows?.[0].n === 0);
@@ -104,6 +109,29 @@ check("a task cannot be completed (scored) twice", Boolean(r.error));
 
 r = await as(A, "select count(*)::int as n from feature_flags where enabled");
 check("billing and premium gating flags start OFF", r.rows?.[0].n === 0);
+
+r = await db.query("select (select count(*) from exercises)::int as e, (select count(*) from meal_ideas)::int as r, (select count(*) from muscles)::int as m");
+check("content seed loads idempotently", r.rows[0].e > 40 && r.rows[0].r > 30 && r.rows[0].m === 14);
+
+r = await as(B, "select count(*)::int as n from meal_ideas");
+check("seeded meal ideas stay hidden until approved", r.rows?.[0].n === 0);
+
+r = await db
+  .query("insert into meal_ideas (slug, title_he, hint_he) values ('x', 'יוגורט', 'מאתיים גרם 200')")
+  .then(() => ({}), (e) => ({ error: e.message }));
+check("meal ideas cannot carry amounts (no digits)", Boolean(r.error));
+
+r = await as(A, `insert into water_logs (user_id, date, amount_ml) values ('${A}', '2026-11-01', 500) returning 1`);
+check("user logs own water fill", r.rows?.length === 1);
+
+r = await as(B, `insert into water_logs (user_id, date, amount_ml) values ('${A}', '2026-11-01', 500)`);
+check("user cannot log water for another user", Boolean(r.error));
+
+r = await as(B, "select count(*)::int as n from water_logs");
+check("user cannot read another user's water log", r.rows?.[0].n === 0);
+
+r = await as(B, "select count(*)::int as n from exercises where slug = 'plank'");
+check("seeded exercises stay hidden until approved", r.rows?.[0].n === 0);
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nAll RLS checks passed");
 process.exit(failed ? 1 : 0);
