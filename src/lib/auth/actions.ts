@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getDictionary } from "@/lib/i18n/he";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
-import { authErrorMessage } from "./errors";
+import { authErrorMessage, authErrorWithRef } from "./errors";
 import { requestOrigin } from "./origin";
 import { safeNext } from "./routes";
 
@@ -29,7 +29,7 @@ export async function signIn(_prev: AuthFormState, form: FormData): Promise<Auth
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signInWithPassword(parsed.data);
-  if (error) return { error: authErrorMessage(error.code), email: parsed.data.email };
+  if (error) return { error: authErrorWithRef(error), email: parsed.data.email };
 
   redirect(safeNext(String(form.get("next") ?? "")));
 }
@@ -57,8 +57,8 @@ export async function signUp(_prev: AuthFormState, form: FormData): Promise<Auth
   });
   if (error) {
     // Code and status only (no email address) so the cause shows in the server logs.
-    console.error("signUp failed", { code: error.code, status: error.status });
-    return { error: authErrorMessage(error.code), email: rawEmail };
+    console.error("signUp failed", { code: error.code, status: error.status, name: error.name });
+    return { error: authErrorWithRef(error), email: rawEmail };
   }
 
   // Email confirmation off (e.g. local dev): a session exists already.
