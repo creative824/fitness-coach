@@ -21,9 +21,9 @@ export function FieldShell({
 }) {
   const hintId = useId();
   const labelEl = asGroup ? (
-    <legend className="mb-2 font-medium">{label}</legend>
+    <legend className="mb-2 text-sm font-medium">{label}</legend>
   ) : (
-    <label htmlFor={htmlFor} className="font-medium">
+    <label htmlFor={htmlFor} className="text-sm font-medium">
       {label}
     </label>
   );
@@ -50,7 +50,7 @@ export function FieldShell({
 }
 
 const inputCls =
-  "min-h-12 w-full rounded-2xl border border-line bg-surface px-4 text-base text-ink focus:border-brand aria-invalid:border-2 aria-invalid:border-danger";
+  "min-h-13 w-full rounded-2xl border border-transparent bg-field px-4 text-base text-ink transition-colors hover:border-line focus:border-ink focus:bg-surface focus:outline-none aria-invalid:border-2 aria-invalid:border-danger";
 
 export function TextField({
   label,
@@ -182,7 +182,7 @@ export function ChipGroup<T extends string | number>({
                 onChange(selected ? value.filter((v) => v !== o.value) : [...value, o.value]);
               }}
               className={`min-h-11 rounded-full border px-4 text-sm font-medium transition-colors disabled:opacity-40 ${
-                selected ? "border-brand bg-brand text-white" : "border-line bg-surface text-ink hover:bg-brand-soft"
+                selected ? "border-night bg-night text-white shadow-[0_6px_16px_-8px_rgba(18,21,19,0.6)]" : "border-transparent bg-field text-ink hover:border-line"
               }`}
             >
               {o.label}
@@ -226,8 +226,8 @@ export function YesNo({
               value === v
                 ? v
                   ? "border-warning bg-warning-soft text-warning"
-                  : "border-brand bg-brand text-white"
-                : "border-line bg-surface hover:bg-brand-soft"
+                  : "border-night bg-night text-white"
+                : "border-transparent bg-field hover:border-line"
             }`}
           >
             {l}

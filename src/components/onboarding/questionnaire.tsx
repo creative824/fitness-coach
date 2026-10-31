@@ -115,12 +115,12 @@ export function Questionnaire({ initial, initialStep }: { initial: OnboardingDra
           className="flex gap-1.5"
         >
           {STEP_ORDER.map((k, i) => (
-            <span key={k} className={`h-2 flex-1 rounded-full ${i < step ? "bg-brand" : i === step ? "bg-accent" : "bg-brand-soft"}`} />
+            <span key={k} className={`h-1.5 flex-1 rounded-full transition-colors ${i < step ? "bg-night" : i === step ? "bg-accent" : "bg-white"}`} />
           ))}
         </div>
       </div>
 
-      <h2 ref={headingRef} tabIndex={-1} className="text-xl font-bold outline-none">
+      <h2 ref={headingRef} tabIndex={-1} className="text-2xl font-semibold outline-none">
         {key ? s.steps[key] : s.summaryTitle}
       </h2>
 
@@ -210,7 +210,7 @@ export function Questionnaire({ initial, initialStep }: { initial: OnboardingDra
       ) : null}
 
       {/* Navigation */}
-      <div className="sticky bottom-0 -mx-4 flex gap-3 border-t border-line bg-canvas/95 px-4 py-3 backdrop-blur">
+      <div className="sticky bottom-0 -mx-4 flex gap-3 bg-gradient-to-t from-canvas via-canvas/95 to-canvas/0 px-4 pt-6 pb-[max(env(safe-area-inset-bottom),1rem)]">
         {step > 0 ? (
           <Button variant="secondary" onClick={back} className="flex-1">
             {s.back}
@@ -300,7 +300,7 @@ function Summary({ draft, onEdit }: { draft: OnboardingDraft; onEdit: (step: num
       ? { Icon: ShieldAlert, cls: "border-danger/30 bg-danger-soft", title: t.safety.referTitle, body: t.safety.referBody }
       : safety.level === "caution"
         ? { Icon: AlertTriangle, cls: "border-warning/30 bg-warning-soft", title: t.safety.cautionTitle, body: t.safety.cautionBody }
-        : { Icon: CheckCircle2, cls: "border-brand/20 bg-brand-soft", title: t.safety.clearTitle, body: t.safety.clearBody };
+        : { Icon: CheckCircle2, cls: "bg-accent-soft", title: t.safety.clearTitle, body: t.safety.clearBody };
 
   return (
     <div className="flex flex-col gap-4">
