@@ -55,7 +55,11 @@ export async function signUp(_prev: AuthFormState, form: FormData): Promise<Auth
       data: { accepted_terms_at: new Date().toISOString(), confirmed_adult: true },
     },
   });
-  if (error) return { error: authErrorMessage(error.code), email: rawEmail };
+  if (error) {
+    // Code and status only (no email address) so the cause shows in the server logs.
+    console.error("signUp failed", { code: error.code, status: error.status });
+    return { error: authErrorMessage(error.code), email: rawEmail };
+  }
 
   // Email confirmation off (e.g. local dev): a session exists already.
   if (data.session) redirect("/onboarding");

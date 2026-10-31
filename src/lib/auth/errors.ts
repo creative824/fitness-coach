@@ -15,6 +15,11 @@ export function authErrorMessage(code: string | undefined | null): string {
     over_email_send_rate_limit: "over_request_rate_limit",
     email_address_invalid: "invalid_email",
     validation_failed: "invalid_email",
+    // Supabase's built-in mailer only sends to project team members until custom SMTP is set up.
+    email_address_not_authorized: "email_send_failed",
+    unexpected_failure: "email_send_failed",
+    signup_disabled: "signups_disabled",
+    email_provider_disabled: "signups_disabled",
   };
   return e[map[code ?? ""] ?? "generic"];
 }
