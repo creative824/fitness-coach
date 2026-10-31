@@ -57,7 +57,14 @@ export async function signUp(_prev: AuthFormState, form: FormData): Promise<Auth
   });
   if (error) {
     // Code and status only (no email address) so the cause shows in the server logs.
-    console.error("signUp failed", { code: error.code, status: error.status, name: error.name });
+    console.error("signUp failed", {
+      code: error.code,
+      status: error.status,
+      name: error.name,
+      // For network failures this says why (DNS, invalid header, ...); it never contains the email.
+      message: error.message,
+      cause: String((error as { cause?: unknown }).cause ?? ""),
+    });
     return { error: authErrorWithRef(error), email: rawEmail };
   }
 
