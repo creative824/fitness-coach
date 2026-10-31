@@ -73,7 +73,7 @@ export function WaterTracker({ water }: { water: WaterToday }) {
               name="vessel_ml"
               value={v}
               aria-pressed={v === vesselMl}
-              className={`min-h-10 rounded-full border px-3 text-sm ${v === vesselMl ? "border-brand bg-brand-soft font-medium" : "border-line"}`}
+              className={`min-h-10 rounded-xl border px-3 text-sm ${v === vesselMl ? "border-brand bg-brand-soft font-medium" : "border-line"}`}
             >
               {t.vessels[String(v) as keyof typeof t.vessels]} <span className="ltr-nums text-ink-muted">{v}</span>
             </button>

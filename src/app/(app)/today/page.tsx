@@ -9,6 +9,8 @@ import { WeekStrip } from "@/components/ui/week-strip";
 import { requireUser } from "@/lib/data/user";
 import { getDictionary } from "@/lib/i18n/he";
 import { getProfileSummary } from "@/lib/data/profile";
+import { WaterTracker } from "@/components/water/water-tracker";
+import { loadWaterToday } from "@/lib/water/data";
 
 const t = getDictionary();
 const s = t.screens.today;
@@ -35,6 +37,8 @@ async function Today() {
   const profile = await getProfileSummary(user.id);
   const name = profile?.display_name;
   const ready = Boolean(profile?.onboarding_completed_at);
+  // Water works before the plan engine exists. Hidden if the 0002 migration has not run yet.
+  const water = ready ? await loadWaterToday(user.id).catch(() => null) : null;
 
   return (
     <>
@@ -60,6 +64,8 @@ async function Today() {
           <DailyMeter earned={0} possible={0} tasksDone={0} tasksTotal={0} label={s.meterLabel} tone="dark" />
         </div>
       </Card>
+
+      {water ? <WaterTracker water={water} /> : null}
 
       <section aria-labelledby="areas" className="flex flex-col gap-3">
         <h2 id="areas" className="text-lg font-semibold">
