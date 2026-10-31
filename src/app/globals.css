@@ -1,28 +1,61 @@
 @import "tailwindcss";
 
 /*
- * Design tokens (spec §14). Light, calm, card-based UI.
- * Colours are referenced through Tailwind theme names: bg-surface, text-ink, bg-brand, bg-accent …
+ * Design tokens · "Graphite & Lime".
+ * Soft, airy canvas; white cards with deep radii and diffused shadows;
+ * graphite for contrast panels and primary actions; electric lime as the single loud accent.
+ * Secondary hues (coral, sky, lilac, sand) are reserved for data and category tiles.
+ *
+ * Token names from phase 0 are kept (bg-surface, text-ink, bg-brand, bg-accent …) so existing
+ * and upcoming screens pick up the new look without changes.
  */
 @theme {
-  --color-canvas: #f4f7f2; /* page background: light green-grey */
+  --color-canvas: #f1f3ee; /* page background: warm grey with a hint of green */
   --color-surface: #ffffff; /* cards */
-  --color-line: #dfe7dc; /* subtle borders */
-  --color-ink: #17211b; /* main text */
-  --color-ink-muted: #56645b; /* secondary text (AA on canvas + surface) */
-  --color-brand: #246b4a; /* primary: deep green */
-  --color-brand-strong: #1b5238;
-  --color-brand-soft: #e3efe7;
-  --color-accent: #c9f36a; /* highlight: soft lime */
-  --color-accent-soft: #f1fbd9;
+  --color-field: #f3f5f0; /* filled inputs, inner wells */
+  --color-line: #e3e7df; /* hairlines */
+  --color-ink: #121513; /* main text */
+  --color-ink-muted: #5d6660; /* secondary text (AA on canvas + surface) */
+  --color-ink-faint: #8b938d; /* tertiary labels, decorative only */
+
+  --color-brand: #121513; /* primary actions: graphite */
+  --color-brand-strong: #000000;
+  --color-brand-soft: #eceee9;
+
+  --color-accent: #d4f560; /* electric lime */
+  --color-accent-strong: #4c6b00; /* lime-family text on light backgrounds (AA) */
+  --color-accent-soft: #f2fbd0;
+
+  --color-night: #111412; /* dark contrast panels */
+  --color-night-soft: #1d221f;
+  --color-night-line: #2b312d;
+
+  /* Logo blade gradient: lime flowing into teal. */
+  --color-leaf: #8ef03c;
+  --color-teal: #14c4b4;
+
+  --color-coral: #ff7f57;
+  --color-coral-soft: #ffe9e0;
+  --color-sky: #7e9bff;
+  --color-sky-soft: #e8edff;
+  --color-lilac: #b9a4ff;
+  --color-lilac-soft: #f0ebff;
+  --color-sand-soft: #f7f0e3;
+
   --color-danger: #b42318;
   --color-danger-soft: #fdecea;
   --color-warning: #8a5a00;
   --color-warning-soft: #fff4d6;
 
-  --font-sans: var(--font-heebo), "Assistant", system-ui, sans-serif;
+  --font-sans: var(--font-rubik), "Assistant", system-ui, sans-serif;
+  --font-num: var(--font-manrope), var(--font-rubik), system-ui, sans-serif;
 
-  --radius-card: 1.25rem;
+  --radius-card: 1rem;
+  --radius-tile: 0.75rem;
+
+  --shadow-card: 0 1px 2px rgba(18, 21, 19, 0.04), 0 8px 24px -14px rgba(18, 21, 19, 0.12);
+  --shadow-float: 0 2px 6px rgba(18, 21, 19, 0.08), 0 24px 48px -20px rgba(18, 21, 19, 0.35);
+  --shadow-lime: 0 10px 30px -10px rgba(170, 214, 30, 0.75);
 }
 
 html {
@@ -32,22 +65,64 @@ html {
 }
 
 body {
-  background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  /* Two soft glows give the canvas depth without competing with content. */
+  background:
+    radial-gradient(56rem 32rem at 100% -12%, rgba(212, 245, 96, 0.2), transparent 60%),
+    var(--color-canvas);
+  background-attachment: fixed;
 }
 
-/* Visible keyboard focus everywhere (spec §21). */
-:focus-visible {
-  outline: 3px solid var(--color-brand);
-  outline-offset: 2px;
-  border-radius: 0.5rem;
+h1,
+h2,
+h3 {
+  letter-spacing: -0.015em;
+}
+
+/* Visible keyboard focus everywhere (spec §21). In the base layer so utilities can override it. */
+@layer base {
+  :focus-visible {
+    outline: 3px solid var(--color-ink);
+    outline-offset: 3px;
+    border-radius: 0.75rem;
+  }
 }
 
 /* Numbers and Latin words stay readable inside RTL text. */
 .ltr-nums {
   direction: ltr;
   unicode-bidi: isolate;
+}
+
+/* Display numerals: tight, tabular, Latin face. */
+.num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* Subtle grain-free noise substitute: a fine dot grid for dark panels. */
+.dot-grid {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 14px 14px;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.animate-rise {
+  animation: rise 0.5s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

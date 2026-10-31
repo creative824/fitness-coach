@@ -4,8 +4,8 @@
  * with the same shape (see `Dictionary` type and `getDictionary`).
  */
 export const he = {
-  appName: "AI Fitness Coach",
-  appShortName: "Fitness Coach",
+  appName: "trAIning",
+  appShortName: "trAIning",
   appTagline: "מאמן אישי לכושר, תזונה והרגלים, שנמצא בכיס",
 
   nav: {
@@ -29,6 +29,7 @@ export const he = {
   },
 
   landing: {
+    heroEyebrow: "מאמן אישי · תזונה · כושר · הרגלים",
     heroTitle: "שבוע ברור. משימות קטנות. התקדמות אמיתית.",
     heroBody:
       "ממלאים שאלון קצר, מקבלים תוכנית שבועית לתזונה, אימונים והרגלים, ובכל יום רואים בדיוק מה לעשות.",
@@ -42,6 +43,9 @@ export const he = {
       { title: "מתאימים תוך כדי", body: "המאמן עוזר להחליף ארוחה, לקצר אימון או לנוח." },
     ],
     worldsTitle: "ארבעה תחומים, מקום אחד",
+    ctaBandTitle: "מוכנים לשבוע הראשון?",
+    ctaBandBody: "חמש דקות של שאלון, ותוכנית שמתאימה לך מחכה בפנים.",
+    authAside: "תוכנית אישית לתזונה, אימונים והרגלים, עם משימות קטנות לכל יום.",
     worlds: [
       { title: "תזונה", body: "ארוחות פשוטות עם כמויות, חלופות ורשימת קניות." },
       { title: "כושר", body: "אימונים לפי הציוד והזמן שלך, עם מפת שרירים." },
@@ -154,6 +158,10 @@ export const he = {
       readyTitle: "הפרופיל מוכן",
       readyBody: "יצירת התוכנית השבועית תתווסף בשלב הבא. המשימות של היום יופיעו כאן.",
       meterLabel: "המד היומי",
+      weekLabel: "השבוע",
+      areasTitle: "התחומים שלך",
+      areasPending: "יופיע עם התוכנית",
+      areas: { nutrition: "תזונה", workout: "אימון", habits: "הרגלים" },
     },
     plan: {
       title: "התוכנית השבועית",

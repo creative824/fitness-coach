@@ -1,11 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { Heebo } from "next/font/google";
+import { Manrope, Rubik } from "next/font/google";
 import { getDictionary } from "@/lib/i18n/he";
 import "./globals.css";
 
-const heebo = Heebo({
-  variable: "--font-heebo",
+const rubik = Rubik({
+  variable: "--font-rubik",
   subsets: ["hebrew", "latin"],
+  display: "swap",
+});
+
+/** Latin face for display numerals (scores, gauges, stats). */
+const manrope = Manrope({
+  variable: "--font-manrope",
+  subsets: ["latin"],
   display: "swap",
 });
 
@@ -30,7 +37,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#246b4a",
+  themeColor: "#f1f3ee",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
@@ -38,7 +45,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="he" dir="rtl" className={`${heebo.variable} h-full antialiased`}>
+    <html lang="he" dir="rtl" className={`${rubik.variable} ${manrope.variable} h-full antialiased`}>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
