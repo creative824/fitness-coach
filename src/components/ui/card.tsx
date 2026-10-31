@@ -3,7 +3,7 @@ import type { HTMLAttributes } from "react";
 type Tone = "surface" | "night" | "lime" | "glass";
 
 const tones: Record<Tone, string> = {
-  surface: "bg-surface text-ink shadow-[var(--shadow-card)]",
+  surface: "bg-surface text-ink shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]",
   /** Dark contrast panel for hero metrics. */
   night: "bg-night text-white shadow-[var(--shadow-float)]",
   lime: "bg-accent text-ink",

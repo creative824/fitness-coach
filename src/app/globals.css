@@ -50,10 +50,10 @@
   --font-sans: var(--font-rubik), "Assistant", system-ui, sans-serif;
   --font-num: var(--font-manrope), var(--font-rubik), system-ui, sans-serif;
 
-  --radius-card: 1.75rem;
-  --radius-tile: 1.375rem;
+  --radius-card: 1rem;
+  --radius-tile: 0.75rem;
 
-  --shadow-card: 0 1px 2px rgba(18, 21, 19, 0.04), 0 12px 32px -16px rgba(18, 21, 19, 0.14);
+  --shadow-card: 0 1px 2px rgba(18, 21, 19, 0.04), 0 8px 24px -14px rgba(18, 21, 19, 0.12);
   --shadow-float: 0 2px 6px rgba(18, 21, 19, 0.08), 0 24px 48px -20px rgba(18, 21, 19, 0.35);
   --shadow-lime: 0 10px 30px -10px rgba(170, 214, 30, 0.75);
 }
@@ -69,8 +69,7 @@ body {
   font-family: var(--font-sans);
   /* Two soft glows give the canvas depth without competing with content. */
   background:
-    radial-gradient(60rem 36rem at 100% -10%, rgba(212, 245, 96, 0.28), transparent 60%),
-    radial-gradient(40rem 30rem at -10% 30%, rgba(126, 155, 255, 0.1), transparent 60%),
+    radial-gradient(56rem 32rem at 100% -12%, rgba(212, 245, 96, 0.2), transparent 60%),
     var(--color-canvas);
   background-attachment: fixed;
 }

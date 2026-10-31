@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: t.auth.checkEmailTitle };
 export default function CheckEmailPage() {
   return (
     <AuthShell title={t.auth.checkEmailTitle}>
-      <div className="flex size-14 items-center justify-center rounded-[1.25rem] bg-night text-accent">
+      <div className="flex size-14 items-center justify-center rounded-xl bg-night text-accent">
         <MailCheck aria-hidden="true" className="size-6" />
       </div>
       <p className="text-ink-muted">{t.auth.checkEmailBody}</p>

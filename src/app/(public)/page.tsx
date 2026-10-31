@@ -23,7 +23,7 @@ export default function LandingPage() {
         <Logo />
         <Link
           href="/login"
-          className="rounded-full bg-white/70 px-5 py-2.5 text-sm font-medium ring-1 ring-white backdrop-blur transition-colors hover:bg-white"
+          className="rounded-xl bg-white/70 px-5 py-2.5 text-sm font-medium ring-1 ring-white backdrop-blur transition-colors hover:bg-white"
         >
           {t.auth.loginTitle}
         </Link>
@@ -33,7 +33,7 @@ export default function LandingPage() {
         {/* Hero */}
         <section className="grid items-center gap-12 pt-6 md:grid-cols-[1.1fr_1fr] md:pt-14">
           <div className="animate-rise flex flex-col gap-6">
-            <span className="inline-flex w-fit items-center gap-2 rounded-full bg-white/80 px-3.5 py-1.5 text-sm font-medium ring-1 ring-white">
+            <span className="inline-flex w-fit items-center gap-2 rounded-lg bg-white/80 px-3.5 py-1.5 text-sm font-medium ring-1 ring-white">
               <span aria-hidden="true" className="size-2 rounded-full bg-accent shadow-[0_0_0_3px_rgba(212,245,96,0.35)]" />
               {t.landing.heroEyebrow}
             </span>
@@ -70,8 +70,8 @@ export default function LandingPage() {
           <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {t.landing.steps.map((step, i) => (
               <li key={step.title}>
-                <Card className="flex h-full flex-col gap-10 p-6">
-                  <span className="num text-5xl font-bold text-ink/15">{String(i + 1).padStart(2, "0")}</span>
+                <Card className="flex h-full flex-col gap-6 p-6">
+                  <span className="num text-4xl font-bold text-ink/15">{String(i + 1).padStart(2, "0")}</span>
                   <div className="flex flex-col gap-2">
                     <h3 className="text-lg font-semibold">{step.title}</h3>
                     <p className="leading-relaxed text-ink-muted">{step.body}</p>
@@ -91,13 +91,8 @@ export default function LandingPage() {
               return (
                 <li
                   key={world.title}
-                  className={`relative flex min-h-56 flex-col justify-between gap-8 overflow-hidden rounded-[var(--radius-card)] p-6 md:p-8 ${tile} ${span}`}
+                  className={`relative flex min-h-48 flex-col justify-between gap-8 overflow-hidden rounded-[var(--radius-card)] p-6 md:p-8 ${tile} ${span}`}
                 >
-                  <Icon
-                    aria-hidden="true"
-                    strokeWidth={1}
-                    className={`pointer-events-none absolute -bottom-8 -left-8 size-44 ${dark ? "text-white/5" : "text-ink/5"}`}
-                  />
                   <span className={`relative flex size-12 items-center justify-center rounded-full ${chip}`}>
                     <Icon aria-hidden="true" className="size-5" />
                   </span>
@@ -138,8 +133,8 @@ export default function LandingPage() {
         </section>
 
         {/* Closing call to action */}
-        <section className="dot-grid relative overflow-hidden rounded-[2.25rem] bg-night px-6 py-14 text-center text-white md:py-20">
-          <div aria-hidden="true" className="pointer-events-none absolute -top-32 left-1/2 size-96 -translate-x-1/2 rounded-full bg-accent/25 blur-3xl" />
+        <section className="relative overflow-hidden rounded-2xl bg-night px-6 py-14 text-center text-white md:py-20">
+          <div aria-hidden="true" className="pointer-events-none absolute -top-32 left-1/2 size-96 -translate-x-1/2 rounded-full bg-accent/15 blur-3xl" />
           <div className="relative mx-auto flex max-w-xl flex-col items-center gap-5">
             <h2 className="text-3xl font-semibold md:text-5xl">{t.landing.ctaBandTitle}</h2>
             <p className="text-lg text-white/70">{t.landing.ctaBandBody}</p>
@@ -205,7 +200,7 @@ function HeroPreview() {
             </div>
           </div>
 
-          <div className="dot-grid flex items-center justify-between rounded-[1.4rem] bg-night p-4 text-white">
+          <div className="flex items-center justify-between rounded-xl bg-night p-4 text-white">
             <div className="flex flex-col gap-1">
               <span className="text-[0.65rem] text-white/60">המד היומי</span>
               <span className="num text-2xl font-bold">
@@ -245,7 +240,7 @@ function HeroPreview() {
             ].map(([tile, chip, Icon], i) => {
               const I = Icon as typeof Salad;
               return (
-                <div key={i} className={`flex h-16 flex-col justify-between rounded-2xl p-2 ${tile as string}`}>
+                <div key={i} className={`flex h-16 flex-col justify-between rounded-xl p-2 ${tile as string}`}>
                   <span className={`flex size-6 items-center justify-center rounded-full text-white ${chip as string}`}>
                     <I className="size-3" />
                   </span>
@@ -259,7 +254,7 @@ function HeroPreview() {
 
           <ul className="flex flex-col gap-1.5">
             {tasks.map((task) => (
-              <li key={task.label} className="flex items-center gap-2.5 rounded-2xl bg-surface px-3 py-2.5 text-[0.7rem]">
+              <li key={task.label} className="flex items-center gap-2.5 rounded-xl bg-surface px-3 py-2.5 text-[0.7rem]">
                 <span
                   className={`flex size-5 shrink-0 items-center justify-center rounded-full ${
                     task.done ? "bg-night text-accent" : "ring-2 ring-line ring-inset"
@@ -276,7 +271,7 @@ function HeroPreview() {
       </div>
 
       {/* Floating stat cards */}
-      <div className="absolute top-24 -left-3 hidden w-36 sm:flex flex-col gap-2 rounded-[1.25rem] bg-white/90 p-3.5 shadow-[var(--shadow-float)] ring-1 ring-white backdrop-blur md:-left-14">
+      <div className="absolute top-24 -left-3 hidden w-36 sm:flex flex-col gap-2 rounded-xl bg-white/90 p-3.5 shadow-[var(--shadow-float)] ring-1 ring-white backdrop-blur md:-left-14">
         <span className="text-[0.7rem] text-ink-muted">מים היום</span>
         <span className="text-sm font-semibold">
           <span className="num text-2xl font-bold">3</span> מתוך <span className="num">6</span> מילויים
@@ -287,7 +282,7 @@ function HeroPreview() {
           ))}
         </span>
       </div>
-      <div className="absolute bottom-24 -right-3 hidden items-center sm:flex gap-2.5 rounded-full bg-night py-2 ps-2 pe-4 text-white shadow-[var(--shadow-float)] md:-right-12">
+      <div className="absolute bottom-24 -right-3 hidden items-center sm:flex gap-2.5 rounded-xl bg-night py-2 ps-2 pe-4 text-white shadow-[var(--shadow-float)] md:-right-12">
         <span className="flex size-8 items-center justify-center rounded-full bg-accent text-ink">
           <Dumbbell className="size-4" />
         </span>

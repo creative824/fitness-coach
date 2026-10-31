@@ -24,9 +24,9 @@ export default function TodayPage() {
 }
 
 const areas = [
-  { key: "nutrition", Icon: Salad, tile: "bg-coral-soft", chip: "bg-coral text-white" },
-  { key: "workout", Icon: Dumbbell, tile: "bg-sky-soft", chip: "bg-sky text-white" },
-  { key: "habits", Icon: Droplets, tile: "bg-lilac-soft", chip: "bg-lilac text-white" },
+  { key: "nutrition", Icon: Salad, chip: "bg-coral-soft text-coral" },
+  { key: "workout", Icon: Dumbbell, chip: "bg-sky-soft text-sky" },
+  { key: "habits", Icon: Droplets, chip: "bg-lilac-soft text-lilac" },
 ] as const;
 
 /** Tasks, completion and scoring arrive in phase 3. */
@@ -55,11 +55,7 @@ async function Today() {
 
       <WeekStrip label={s.weekLabel} />
 
-      <Card tone="night" className="dot-grid relative overflow-hidden p-6">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -bottom-20 -left-16 size-56 rounded-full bg-accent/20 blur-3xl"
-        />
+      <Card tone="night" className="relative overflow-hidden p-6">
         <div className="relative">
           <DailyMeter earned={0} possible={0} tasksDone={0} tasksTotal={0} label={s.meterLabel} tone="dark" />
         </div>
@@ -69,16 +65,14 @@ async function Today() {
         <h2 id="areas" className="text-lg font-semibold">
           {s.areasTitle}
         </h2>
-        <ul className="grid grid-cols-3 gap-3">
-          {areas.map(({ key, Icon, tile, chip }) => (
-            <li key={key} className={`flex flex-col gap-6 rounded-[var(--radius-tile)] p-4 ${tile}`}>
-              <span className={`flex size-10 items-center justify-center rounded-full ${chip}`}>
+        <ul className="grid grid-cols-3 divide-x divide-line rounded-[var(--radius-card)] bg-surface py-4 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
+          {areas.map(({ key, Icon, chip }) => (
+            <li key={key} className="flex flex-col items-center gap-2 px-2 text-center">
+              <span className={`flex size-10 items-center justify-center rounded-xl ${chip}`}>
                 <Icon aria-hidden="true" className="size-5" />
               </span>
-              <span className="flex flex-col gap-0.5">
-                <span className="font-semibold">{s.areas[key]}</span>
-                <span className="text-xs text-ink-muted">{s.areasPending}</span>
-              </span>
+              <span className="text-sm font-semibold">{s.areas[key]}</span>
+              <span className="text-xs leading-snug text-ink-muted">{s.areasPending}</span>
             </li>
           ))}
         </ul>

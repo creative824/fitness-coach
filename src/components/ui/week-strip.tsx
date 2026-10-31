@@ -19,14 +19,14 @@ export async function WeekStrip({ label }: { label: string }) {
 
   return (
     <section aria-label={label}>
-      <ol className="grid grid-cols-7 gap-1.5">
+      <ol className="grid grid-cols-7 gap-1 rounded-2xl bg-surface p-1.5 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
         {days.map((d) => (
           <li key={d.key}>
             <div
               aria-current={d.today ? "date" : undefined}
               aria-label={d.full}
-              className={`flex flex-col items-center gap-1.5 rounded-full py-3 transition-colors ${
-                d.today ? "bg-night text-white shadow-[var(--shadow-float)]" : "bg-white/70 text-ink-muted"
+              className={`flex flex-col items-center gap-1 rounded-xl py-2.5 transition-colors ${
+                d.today ? "bg-night text-white" : "text-ink-muted"
               }`}
             >
               <span className="text-xs">{d.name}</span>

@@ -27,7 +27,7 @@ function AuthAside() {
   return (
     <aside
       aria-hidden="true"
-      className="dot-grid relative hidden w-[44%] max-w-xl flex-col justify-between overflow-hidden rounded-[2.25rem] bg-night p-10 text-white lg:flex"
+      className="relative hidden w-[44%] max-w-xl flex-col justify-between overflow-hidden rounded-2xl bg-night p-10 text-white lg:flex"
     >
       <div className="pointer-events-none absolute -top-24 -left-24 size-96 rounded-full bg-accent/25 blur-3xl" />
       <span className="relative"><Logo tone="dark" /></span>
@@ -75,7 +75,7 @@ export function Field({
         minLength={minLength}
         defaultValue={defaultValue}
         aria-describedby={hint ? `${id}-hint` : undefined}
-        className="min-h-13 rounded-2xl border border-transparent bg-field px-4 text-base text-ink transition-colors placeholder:text-ink-muted hover:border-line focus:border-ink focus:bg-surface focus:outline-none"
+        className="min-h-12 rounded-xl border border-transparent bg-field px-4 text-base text-ink transition-colors placeholder:text-ink-muted hover:border-line focus:border-ink focus:bg-surface focus:outline-none"
       />
       {hint ? (
         <span id={`${id}-hint`} className="text-sm text-ink-muted">
@@ -90,7 +90,7 @@ export function FormAlert({ kind, children }: { kind: "error" | "info"; children
   return (
     <p
       role={kind === "error" ? "alert" : "status"}
-      className={`rounded-2xl px-4 py-3 text-sm ${kind === "error" ? "bg-danger-soft text-danger" : "bg-accent-soft text-ink"}`}
+      className={`rounded-xl px-4 py-3 text-sm ${kind === "error" ? "bg-danger-soft text-danger" : "bg-accent-soft text-ink"}`}
     >
       {children}
     </p>

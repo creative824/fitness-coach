@@ -32,8 +32,7 @@ async function ProfileContent() {
   const profile = await getProfileSummary(user.id);
   return (
     <>
-      <Card tone="night" className="dot-grid relative flex flex-col gap-5 overflow-hidden p-6">
-        <div aria-hidden="true" className="pointer-events-none absolute -top-16 -left-10 size-48 rounded-full bg-accent/20 blur-3xl" />
+      <Card tone="night" className="relative flex flex-col gap-5 overflow-hidden p-6">
         <div className="relative flex items-center gap-4">
           <span
             aria-hidden="true"
@@ -55,7 +54,7 @@ async function ProfileContent() {
       </Card>
       <Card className="flex flex-col gap-3">
         <h2 className="font-semibold">{s.account}</h2>
-        <span dir="ltr" className="rounded-2xl bg-field px-4 py-3 text-end text-ink-muted">
+        <span dir="ltr" className="rounded-xl bg-field px-4 py-3 text-end text-ink-muted">
           {user.email}
         </span>
         <form action={signOut}>

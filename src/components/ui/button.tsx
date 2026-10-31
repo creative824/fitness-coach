@@ -4,7 +4,7 @@ import type { ButtonHTMLAttributes, ComponentProps } from "react";
 type Variant = "primary" | "accent" | "secondary" | "ghost";
 
 const base =
-  "group/btn inline-flex min-h-13 items-center justify-center gap-2 rounded-full px-6 text-base font-medium transition-[background-color,box-shadow,transform] duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50";
+  "group/btn inline-flex min-h-12 items-center justify-center gap-2 rounded-xl px-6 text-base font-medium transition-[background-color,box-shadow,transform] duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50";
 
 const variants: Record<Variant, string> = {
   /** Graphite pill: the main action on light backgrounds. */

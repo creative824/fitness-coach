@@ -32,7 +32,7 @@ export function BottomNav() {
       aria-label={t.nav.mainLabel}
       className="fixed inset-x-0 bottom-0 z-20 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] md:hidden"
     >
-      <ul className="mx-auto flex max-w-md items-center justify-between gap-1 rounded-full bg-night/95 p-1.5 shadow-[var(--shadow-float)] ring-1 ring-white/5 backdrop-blur-xl">
+      <ul className="mx-auto flex max-w-md items-center justify-between gap-1 rounded-2xl bg-night/95 p-1.5 shadow-[var(--shadow-float)] ring-1 ring-white/5 backdrop-blur-xl">
         {items.map(({ href, label, Icon }) => {
           const active = isActive(href);
           return (
@@ -41,7 +41,7 @@ export function BottomNav() {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 aria-label={label}
-                className={`flex h-13 items-center justify-center gap-2 rounded-full text-sm font-medium transition-all duration-300 ${
+                className={`flex h-12 items-center justify-center gap-2 rounded-xl text-sm font-medium transition-all duration-300 ${
                   active ? "bg-accent px-3 text-ink" : "text-white/60 hover:text-white"
                 }`}
               >
@@ -63,7 +63,7 @@ export function SideNav() {
     <div className="sticky top-0 hidden h-dvh shrink-0 p-4 md:block">
       <nav
         aria-label={t.nav.mainLabel}
-        className="flex h-full w-60 flex-col gap-8 rounded-[2rem] bg-white/70 px-3 py-6 shadow-[var(--shadow-card)] ring-1 ring-white backdrop-blur-xl"
+        className="flex h-full w-60 flex-col gap-8 rounded-2xl bg-white/70 px-3 py-6 shadow-[var(--shadow-card)] ring-1 ring-white backdrop-blur-xl"
       >
         <div className="px-3">
           <Logo href="/today" />
@@ -76,7 +76,7 @@ export function SideNav() {
                 <Link
                   href={href}
                   aria-current={active ? "page" : undefined}
-                  className={`flex min-h-12 items-center gap-3 rounded-full px-4 font-medium transition-colors ${
+                  className={`flex min-h-11 items-center gap-3 rounded-xl px-4 font-medium transition-colors ${
                     active ? "bg-night text-white" : "text-ink-muted hover:bg-white hover:text-ink"
                   }`}
                 >

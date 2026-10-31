@@ -125,7 +125,7 @@ export function Questionnaire({ initial, initialStep }: { initial: OnboardingDra
       </h2>
 
       {showErrors && errors.length > 0 ? (
-        <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-sm text-danger">
+        <p role="alert" className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">
           {underage && key === "details" ? t.auth.ageNote : s.fixFields}
         </p>
       ) : null}
@@ -204,7 +204,7 @@ export function Questionnaire({ initial, initialStep }: { initial: OnboardingDra
       {step === SUMMARY && <Summary draft={draft} onEdit={(i) => setStep(i)} />}
 
       {completeError ? (
-        <p role="alert" className="rounded-2xl bg-danger-soft px-4 py-3 text-sm text-danger">
+        <p role="alert" className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">
           {t.common.errorBody}
         </p>
       ) : null}

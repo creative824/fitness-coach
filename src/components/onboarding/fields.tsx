@@ -39,7 +39,7 @@ export function FieldShell({
     </>
   );
   // Groups get a red outline; single inputs show it on their own border (aria-invalid).
-  const cls = `flex flex-col gap-1.5 rounded-2xl ${invalid && asGroup ? "outline-2 outline-offset-4 outline-danger outline" : ""}`;
+  const cls = `flex flex-col gap-1.5 rounded-xl ${invalid && asGroup ? "outline-2 outline-offset-4 outline-danger outline" : ""}`;
   return asGroup ? (
     <fieldset className={cls} aria-invalid={invalid || undefined}>
       {body}
@@ -50,7 +50,7 @@ export function FieldShell({
 }
 
 const inputCls =
-  "min-h-13 w-full rounded-2xl border border-transparent bg-field px-4 text-base text-ink transition-colors hover:border-line focus:border-ink focus:bg-surface focus:outline-none aria-invalid:border-2 aria-invalid:border-danger";
+  "min-h-12 w-full rounded-xl border border-transparent bg-field px-4 text-base text-ink transition-colors hover:border-line focus:border-ink focus:bg-surface focus:outline-none aria-invalid:border-2 aria-invalid:border-danger";
 
 export function TextField({
   label,
@@ -181,7 +181,7 @@ export function ChipGroup<T extends string | number>({
                 if (!multiple) return onChange([o.value]);
                 onChange(selected ? value.filter((v) => v !== o.value) : [...value, o.value]);
               }}
-              className={`min-h-11 rounded-full border px-4 text-sm font-medium transition-colors disabled:opacity-40 ${
+              className={`min-h-11 rounded-xl border px-4 text-sm font-medium transition-colors disabled:opacity-40 ${
                 selected ? "border-night bg-night text-white shadow-[0_6px_16px_-8px_rgba(18,21,19,0.6)]" : "border-transparent bg-field text-ink hover:border-line"
               }`}
             >
@@ -222,7 +222,7 @@ export function YesNo({
             role="radio"
             aria-checked={value === v}
             onClick={() => onChange(v)}
-            className={`min-h-11 min-w-20 rounded-full border px-5 text-sm font-medium ${
+            className={`min-h-11 min-w-20 rounded-xl border px-5 text-sm font-medium ${
               value === v
                 ? v
                   ? "border-warning bg-warning-soft text-warning"

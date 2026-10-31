@@ -16,12 +16,8 @@ export function EmptyState({
 }) {
   return (
     <Card className="relative flex flex-col items-center gap-3 overflow-hidden px-6 py-10 text-center">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -top-24 left-1/2 size-56 -translate-x-1/2 rounded-full bg-accent/35 blur-3xl"
-      />
       {icon ? (
-        <div className="relative mb-1 flex size-16 items-center justify-center rounded-[1.25rem] bg-night text-accent shadow-[var(--shadow-float)] [&_svg]:size-7">
+        <div className="relative mb-1 flex size-16 items-center justify-center rounded-xl bg-night text-accent shadow-[var(--shadow-float)] [&_svg]:size-7">
           {icon}
         </div>
       ) : null}
