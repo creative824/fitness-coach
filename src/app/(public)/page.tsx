@@ -278,12 +278,12 @@ function HeroPreview() {
       {/* Floating stat cards */}
       <div className="absolute top-24 -left-3 hidden w-36 sm:flex flex-col gap-2 rounded-[1.25rem] bg-white/90 p-3.5 shadow-[var(--shadow-float)] ring-1 ring-white backdrop-blur md:-left-14">
         <span className="text-[0.7rem] text-ink-muted">מים היום</span>
-        <span className="num text-2xl font-bold">
-          6<span className="text-sm text-ink-muted">/8</span>
+        <span className="text-sm font-semibold">
+          <span className="num text-2xl font-bold">3</span> מתוך <span className="num">6</span> מילויים
         </span>
         <span className="flex gap-1">
-          {Array.from({ length: 8 }, (_, i) => (
-            <span key={i} className={`h-1.5 flex-1 rounded-full ${i < 6 ? "bg-sky" : "bg-field"}`} />
+          {Array.from({ length: 6 }, (_, i) => (
+            <span key={i} className={`h-1.5 flex-1 rounded-full ${i < 3 ? "bg-sky" : "bg-field"}`} />
           ))}
         </span>
       </div>
