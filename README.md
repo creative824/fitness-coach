@@ -2,7 +2,7 @@
 
 פלטפורמת PWA בעברית למאמן אישי בכושר, תזונה והרגלים. המשתמש ממלא שאלון, מקבל תוכנית שבועית, ובכל יום מסמן משימות, צובר נקודות ורואה התקדמות.
 
-**סטטוס:** שלב 0 (שלד). פרטים ב-[docs/TECH_PLAN.md](docs/TECH_PLAN.md).
+**סטטוס:** שלב 1 (הרשמה ושאלון). פרטים ב-[docs/TECH_PLAN.md](docs/TECH_PLAN.md). הגדרת Supabase: [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md).
 
 ## הרצה מקומית
 
@@ -10,7 +10,7 @@
 
 ```bash
 npm install
-cp .env.example .env.local   # בשלב 0 אין צורך למלא ערכים
+cp .env.example .env.local   # למלא כתובת ומפתח Supabase
 npm run dev                  # http://localhost:3000
 ```
 

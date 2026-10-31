@@ -102,7 +102,17 @@ export default function LandingPage() {
       </main>
 
       <footer className="border-t border-line bg-surface">
-        <p className="mx-auto max-w-5xl px-4 py-6 text-sm text-ink-muted">{t.landing.disclaimer}</p>
+        <div className="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-6 text-sm text-ink-muted">
+          <p>{t.landing.disclaimer}</p>
+          <nav className="flex gap-4">
+            <Link href="/privacy" className="underline">
+              {t.legal.privacyTitle}
+            </Link>
+            <Link href="/terms" className="underline">
+              {t.legal.termsTitle}
+            </Link>
+          </nav>
+        </div>
       </footer>
     </div>
   );
