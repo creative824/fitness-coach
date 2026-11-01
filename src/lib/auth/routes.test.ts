@@ -3,7 +3,7 @@ import { isGuestOnly, isProtected, safeNext } from "./routes";
 
 describe("route rules", () => {
   it("protects the personal area, onboarding and admin", () => {
-    for (const p of ["/today", "/plan", "/coach/1", "/progress", "/profile", "/onboarding", "/admin"]) {
+    for (const p of ["/today", "/plan", "/coach/1", "/progress", "/competitions/join", "/profile", "/onboarding", "/admin"]) {
       expect(isProtected(p)).toBe(true);
     }
     for (const p of ["/", "/login", "/privacy", "/todayish"]) expect(isProtected(p)).toBe(false);

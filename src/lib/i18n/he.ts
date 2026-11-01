@@ -14,6 +14,7 @@ export const he = {
     coach: "המאמן",
     progress: "התקדמות",
     profile: "פרופיל",
+    competitions: "תחרויות",
     mainLabel: "ניווט ראשי",
   },
 

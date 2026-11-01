@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarDays, Home, LineChart, MessageCircle, UserRound } from "lucide-react";
+import { Suspense } from "react";
+import { CalendarDays, Home, LineChart, MessageCircle, Trophy, UserRound } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { getDictionary } from "@/lib/i18n/he";
 
@@ -13,20 +14,55 @@ const items = [
   { href: "/plan", label: t.nav.plan, Icon: CalendarDays },
   { href: "/coach", label: t.nav.coach, Icon: MessageCircle },
   { href: "/progress", label: t.nav.progress, Icon: LineChart },
-  { href: "/profile", label: t.nav.profile, Icon: UserRound },
+  { href: "/competitions", label: t.nav.competitions, Icon: Trophy },
 ] as const;
 
-function useIsActive() {
-  const pathname = usePathname();
-  return (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+type IsActive = (href: string) => boolean;
+const none: IsActive = () => false;
+
+/**
+ * The path is request data: on a dynamic route (/competitions/[id]) it must be read inside
+ * Suspense. The fallback is the same nav with nothing highlighted.
+ */
+function withPath(View: (p: { isActive: IsActive }) => React.ReactNode) {
+  function Live() {
+    const pathname = usePathname();
+    return <View isActive={(href) => pathname === href || pathname.startsWith(`${href}/`)} />;
+  }
+  return function Nav() {
+    return (
+      <Suspense fallback={<View isActive={none} />}>
+        <Live />
+      </Suspense>
+    );
+  };
 }
+
+/** Mobile: a slim top row with the logo and the way to the profile, which left the bottom bar. */
+export const TopBar = withPath(function TopBarView({ isActive }) {
+  const active = isActive("/profile");
+  return (
+    <div className="flex items-center justify-between md:hidden">
+      <Logo href="/today" />
+      <Link
+        href="/profile"
+        aria-label={t.nav.profile}
+        aria-current={active ? "page" : undefined}
+        className={`flex size-10 items-center justify-center rounded-full ring-1 transition-colors ${
+          active ? "bg-night text-accent ring-night" : "bg-white/70 text-ink ring-white hover:bg-white"
+        }`}
+      >
+        <UserRound aria-hidden="true" className="size-5" />
+      </Link>
+    </div>
+  );
+});
 
 /**
  * Mobile: a floating graphite pill (spec §4: five items). The active item opens into a lime
  * capsule with its label; the others are icons with accessible names. Hidden from md up.
  */
-export function BottomNav() {
-  const isActive = useIsActive();
+export const BottomNav = withPath(function BottomNavView({ isActive }) {
   return (
     <nav
       aria-label={t.nav.mainLabel}
@@ -54,11 +90,10 @@ export function BottomNav() {
       </ul>
     </nav>
   );
-}
+});
 
 /** Desktop / tablet: a floating rail on the start (right) side. */
-export function SideNav() {
-  const isActive = useIsActive();
+export const SideNav = withPath(function SideNavView({ isActive }) {
   return (
     <div className="sticky top-0 hidden h-dvh shrink-0 p-4 md:block">
       <nav
@@ -87,7 +122,17 @@ export function SideNav() {
             );
           })}
         </ul>
+        <Link
+          href="/profile"
+          aria-current={isActive("/profile") ? "page" : undefined}
+          className={`mt-auto flex min-h-11 items-center gap-3 rounded-xl px-4 font-medium transition-colors ${
+            isActive("/profile") ? "bg-night text-white" : "text-ink-muted hover:bg-white hover:text-ink"
+          }`}
+        >
+          <UserRound aria-hidden="true" className="size-5" />
+          {t.nav.profile}
+        </Link>
       </nav>
     </div>
   );
-}
+});

@@ -269,5 +269,80 @@ r = await asBot(`select save_food_log_as('${A}', '2026-11-01', 'טוסט', true,
 r = await as(A, "select status, source from food_logs where free_text = 'טוסט'");
 check("a meal from the bot is saved as a draft in the same account", r.rows?.[0]?.status === "draft" && r.rows?.[0]?.source === "telegram");
 
+// ── competitions (0008) ──
+const CODE = "c".repeat(64);
+const START = TD;
+const END = addDays(TD, 13);
+r = await as(A, `select create_leaderboard('אתגר נובמבר', 'habits', '${START}', '${END}', 'אורי', '${CODE}') as id`);
+const LB = r.rows?.[0]?.id;
+check("a user creates a competition and becomes its owner", Boolean(LB));
+r = await as(A, `select create_leaderboard('${"x".repeat(41)}', 'habits', '${START}', '${END}', 'אורי', null)`);
+check("a competition name is at most 40 characters", Boolean(r.error));
+r = await as(A, `select create_leaderboard('x', 'weight_loss', '${START}', '${END}', 'אורי', null)`);
+check("only the safe competition kinds exist", Boolean(r.error));
+r = await as(A, `select create_leaderboard('x', 'habits', '${START}', '${addDays(START, 120)}', 'אורי', null)`);
+check("a competition lasts at most 90 days", Boolean(r.error));
+
+r = await as(B, "select count(*)::int as n from leaderboards");
+check("a non-member cannot see a competition", r.rows?.[0].n === 0);
+r = await as(B, `select * from leaderboard_standings('${LB}')`);
+check("a non-member cannot read the standings", Boolean(r.error));
+r = await as(B, `select join_leaderboard('${"d".repeat(64)}', 'בוב') as id`);
+check("a wrong code joins nothing", r.rows?.[0].id === null);
+r = await as(B, `insert into leaderboard_members (leaderboard_id, user_id, display_name) values ('${LB}', '${B}', 'x')`);
+check("users cannot add themselves to a competition directly", Boolean(r.error));
+r = await as(B, `select join_leaderboard('${CODE}', 'בוב') as id`);
+check("a user joins with the code", r.rows?.[0].id === LB);
+r = await as(B, `update leaderboards set max_members = 2 where id = '${LB}' returning 1`);
+check("members cannot change a competition", Boolean(r.error) || r.rows?.length === 0);
+
+r = await as(B, `select display_name, is_me, score from leaderboard_standings('${LB}')`);
+check("members see both nicknames and which row is theirs",
+  r.rows?.length === 2 && r.rows.filter((x) => x.is_me).length === 1 && r.rows.find((x) => x.is_me).display_name === "בוב");
+r = await as(B, `select score from leaderboard_standings('${LB}') where is_me`);
+check("a member with no tasks scores 0, not 100", r.rows?.[0].score === 0);
+r = await as(B, "select count(*)::int as n from leaderboard_members");
+check("members read only their own membership row", r.rows?.[0].n === 1);
+
+// 20 members at most, owner included.
+const extra = Array.from({ length: 19 }, (_, i) => `33333333-3333-3333-3333-${String(i).padStart(12, "0")}`);
+await db.exec(`insert into auth.users (id) values ${extra.map((u) => `('${u}')`).join(", ")}`);
+let lastOk = true;
+for (let i = 0; i < 18; i++) {
+  r = await as(extra[i], `select join_leaderboard('${CODE}', 'm${i}') as id`);
+  lastOk = lastOk && r.rows?.[0].id === LB;
+}
+r = await as(extra[18], `select join_leaderboard('${CODE}', 'one too many')`);
+check("the 21st member is refused (20 including the owner)", lastOk && /full/.test(r.error ?? ""));
+
+r = await as(A, `select member_key from leaderboard_standings('${LB}') where display_name = 'בוב'`);
+const bobKey = r.rows?.[0].member_key;
+r = await as(B, `select leaderboard_remove_member('${LB}', '${bobKey}')`);
+check("only the owner can remove a member", Boolean(r.error));
+r = await as(A, `select leaderboard_remove_member('${LB}', '${bobKey}')`);
+r = await as(B, `select join_leaderboard('${CODE}', 'בוב') as id`);
+check("a removed member cannot rejoin with the code", /removed/.test(r.error ?? ""));
+r = await as(extra[18], `select join_leaderboard('${CODE}', 'now there is room') as id`);
+check("a freed place can be taken", r.rows?.[0].id === LB);
+
+r = await as(A, `select finalize_leaderboard('${LB}') as done`);
+check("a running competition is not finalized", r.rows?.[0].done === false);
+await db.exec(`update leaderboards set start_date = '${addDays(TD, -10)}', end_date = '${addDays(TD, -1)}' where id = '${LB}';
+  update leaderboard_members set joined_at = now() - interval '10 days' where leaderboard_id = '${LB}';
+  insert into daily_tasks (id, plan_id, user_id, date, type, title, points)
+    values ('bbbbbbbb-0000-0000-0000-000000000010', '${PLAN}', '${A}', '${addDays(TD, -2)}', 'water', 'w', 5);
+  insert into task_completions (task_id, user_id, outcome, points_awarded) values ('bbbbbbbb-0000-0000-0000-000000000010', '${A}', 'done', 5);`);
+r = await as(A, `select score, planned from leaderboard_standings('${LB}') where is_me`);
+check("the score is done out of at least three tasks a day, not out of what a stripped plan asks", r.rows?.[0].score === 3 && r.rows[0].planned === 2);
+r = await as(A, `select finalize_leaderboard('${LB}') as done`);
+r = await as(A, `select finalize_leaderboard('${LB}') as again`);
+check("an ended competition is finalized once", r.rows?.[0].again === false);
+r = await as(A, `select rank, prize_points from leaderboard_results where leaderboard_id = '${LB}' and user_id = '${A}'`);
+check("the winner gets the first prize", r.rows?.[0]?.rank === 1 && r.rows[0].prize_points === 100);
+r = await as(extra[0], `select prize_points from leaderboard_results where leaderboard_id = '${LB}' and user_id = '${extra[0]}'`);
+check("a member who did nothing gets no prize", r.rows?.[0]?.prize_points === 0);
+r = await as(extra[0], `select join_leaderboard('${CODE}', 'late')`);
+check("an ended competition cannot be joined", Boolean(r.error) || r.rows?.[0]?.join_leaderboard === null);
+
 console.log(failed ? `\n${failed} check(s) failed` : "\nAll RLS checks passed");
 process.exit(failed ? 1 : 0);
