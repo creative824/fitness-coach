@@ -5,6 +5,7 @@
  */
 import type { SafetyResult } from "@/lib/safety/screen";
 import type { ExerciseCandidate, MealCandidate } from "./candidates";
+import { toMinutes, totalSeconds, warmupSeconds } from "./duration";
 import { weeklyPlanSchema, type WeeklyPlan } from "./schema";
 import { weekDates } from "./week";
 
@@ -14,6 +15,8 @@ export interface ValidationContext {
   meals: MealCandidate[];
   allergies: string[];
   safety: SafetyResult;
+  /** Minutes a session may take. When set, no workout may be longer. */
+  sessionMinutes?: number | null;
 }
 
 export type ValidationResult = { ok: true; plan: WeeklyPlan } | { ok: false; issues: string[] };
@@ -46,6 +49,15 @@ export function validatePlan(raw: unknown, ctx: ValidationContext): ValidationRe
         const e = exercises.get(b.exercise_id);
         if (!e) issues.push(`day ${i}: exercise ${b.exercise_id} is not allowed for this user`);
         else if (r.lowIntensityOnly && e.difficulty !== "beginner") issues.push(`day ${i}: ${e.slug} too hard`);
+      }
+      // Follow-up spec §4: estimated_total_duration <= user_available_minutes, and the shown
+      // total must be the real total of the blocks.
+      const w = day.workout;
+      if (ctx.sessionMinutes) {
+        const budget = ctx.sessionMinutes;
+        const real = toMinutes(totalSeconds(w.blocks, warmupSeconds(budget), (id) => exercises.get(id)?.slug));
+        if (w.estimated_minutes > budget) issues.push(`day ${i}: ${w.estimated_minutes} minutes is over the ${budget} the user has`);
+        if (real !== w.estimated_minutes) issues.push(`day ${i}: shown ${w.estimated_minutes} minutes but the blocks take ${real}`);
       }
     }
   });

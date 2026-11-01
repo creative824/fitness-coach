@@ -61,7 +61,7 @@ export async function generateWeekPlan(userId: string, weekStart: string): Promi
     exercises,
     meals,
   });
-  const check = validatePlan(plan, { weekStart, exercises, meals, allergies: d.allergies, safety });
+  const check = validatePlan(plan, { weekStart, exercises, meals, allergies: d.allergies, safety, sessionMinutes: d.session_minutes ?? 30 });
   if (!check.ok) {
     console.error("plan validation failed", check.issues);
     return { ok: false, reason: "invalid" };
@@ -83,9 +83,14 @@ export async function generateWeekPlan(userId: string, weekStart: string): Promi
 
 export interface ExerciseInfo {
   id: string;
+  slug: string;
   name_he: string;
   equipment: string[];
   primary_muscles: string[];
+  secondary_muscles: string[];
+  instructions_he: string;
+  cautions_he: string | null;
+  easier_slug: string | null;
 }
 export interface MealInfo {
   id: string;
@@ -116,11 +121,16 @@ export async function loadWeek(userId: string, weekStart: string): Promise<WeekV
   if (!parsed.success) return null;
   const plan = parsed.data;
 
-  const exerciseIds = [...new Set(plan.days.flatMap((d) => d.workout?.blocks.map((b) => b.exercise_id) ?? []))];
+  const exerciseIds = [
+    ...new Set(plan.days.flatMap((d) => [...(d.workout?.blocks ?? []), ...(d.workout?.full?.blocks ?? [])].map((b) => b.exercise_id))),
+  ];
   const mealIds = [...new Set(plan.days.flatMap((d) => d.meals.flatMap((m) => [m.meal_idea_id, ...m.alternatives])))];
   const [ex, ml] = await Promise.all([
     exerciseIds.length
-      ? supabase.from("exercises").select("id, name_he, equipment, primary_muscles").in("id", exerciseIds)
+      ? supabase
+          .from("exercises")
+          .select("id, slug, name_he, equipment, primary_muscles, secondary_muscles, instructions_he, cautions_he, easier_slug")
+          .in("id", exerciseIds)
       : Promise.resolve({ data: [], error: null }),
     mealIds.length
       ? supabase.from("meal_ideas").select("id, title_he, hint_he").in("id", mealIds)
