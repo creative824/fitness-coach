@@ -10,7 +10,7 @@ import { foodItemSchema, type FoodItem } from "./items";
 
 export type EstimateResult =
   | { ok: true; items: FoodItem[]; question: string | null }
-  | { ok: false; reason: "no_key" | "not_food" | "failed" };
+  | { ok: false; reason: "no_key" | "not_food" | "failed" | "limit" };
 
 const MODELS = [process.env.GEMINI_MODEL, "gemini-2.5-flash", "gemini-flash-latest"].filter(
   (m, i, all): m is string => Boolean(m) && all.indexOf(m) === i,
