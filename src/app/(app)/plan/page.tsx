@@ -1,20 +1,204 @@
 import type { Metadata } from "next";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, Clock, Dumbbell, Footprints, Droplets, Moon, Salad, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { Suspense } from "react";
+import { CreatePlanButton } from "@/components/plan/create-plan-button";
+import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
-import { EmptyState } from "@/components/ui/states";
+import { EmptyState, LoadingState } from "@/components/ui/states";
+import { getProfileSummary } from "@/lib/data/profile";
+import { requireUser } from "@/lib/data/user";
 import { getDictionary } from "@/lib/i18n/he";
+import { loadWeek } from "@/lib/plan/data";
+import { SLOT_HE } from "@/lib/plan/tasks";
+import { weekdayOf, weekStartOf } from "@/lib/plan/week";
+import { localDay } from "@/lib/water/time";
 
 const t = getDictionary();
 const s = t.screens.plan;
 
 export const metadata: Metadata = { title: s.title };
 
-/** Empty shell. Filled in a later phase (see docs/TECH_PLAN.md). */
-export default function Page() {
+export default function PlanPage({ searchParams }: PageProps<"/plan">) {
+  return (
+    <Suspense fallback={<LoadingState label={t.common.loading} />}>
+      <Plan searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+const HABIT_ICON = { movement: Footprints, water: Droplets, recovery: Moon, habit: Sparkles } as const;
+const dayName = new Intl.DateTimeFormat("he-IL", { weekday: "short", timeZone: "UTC" });
+const dayNum = new Intl.DateTimeFormat("en-US", { day: "numeric", timeZone: "UTC" });
+const fullDate = new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+
+async function Plan({ searchParams }: { searchParams: PageProps<"/plan">["searchParams"] }) {
+  const user = await requireUser();
+  const today = localDay(new Date()).date;
+  const weekStart = weekStartOf(today);
+  const [profile, week, sp] = await Promise.all([getProfileSummary(user.id), loadWeek(user.id, weekStart), searchParams]);
+
+  if (!week) {
+    const ready = Boolean(profile?.onboarding_completed_at);
+    return (
+      <>
+        <PageHeader title={s.title} />
+        <EmptyState
+          icon={<CalendarDays aria-hidden="true" className="size-6" />}
+          title={ready ? s.noPlanTitle : s.notReadyTitle}
+          body={ready ? s.emptyBody : s.notReadyBody}
+          action={ready ? <CreatePlanButton /> : undefined}
+        />
+      </>
+    );
+  }
+
+  const { plan } = week;
+  const raw = Number(Array.isArray(sp.d) ? sp.d[0] : sp.d);
+  const selected = Number.isInteger(raw) && raw >= 0 && raw <= 6 ? raw : weekdayOf(today);
+  const day = plan.days[selected];
+  const at = (d: string) => new Date(`${d}T00:00:00Z`);
+
   return (
     <>
-      <PageHeader title={s.title} />
-      <EmptyState icon={<CalendarDays aria-hidden="true" className="size-6" />} title={t.common.comingSoon} body={s.emptyBody} />
+      <PageHeader title={s.title} subtitle={plan.summary.focus} />
+
+      <nav aria-label={s.daysLabel}>
+        <ol className="grid grid-cols-7 gap-1 rounded-2xl bg-surface p-1.5 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
+          {plan.days.map((d, i) => (
+            <li key={d.date}>
+              <Link
+                href={`/plan?d=${i}`}
+                scroll={false}
+                aria-current={i === selected ? "page" : undefined}
+                aria-label={fullDate.format(at(d.date))}
+                className={`flex flex-col items-center gap-1 rounded-xl py-2.5 transition-colors ${
+                  i === selected ? "bg-night text-white" : "text-ink-muted hover:bg-field hover:text-ink"
+                }`}
+              >
+                <span className="text-xs">{dayName.format(at(d.date))}</span>
+                <span className="num text-base font-semibold">{dayNum.format(at(d.date))}</span>
+                <span className={`size-1.5 rounded-full ${d.workout ? "bg-accent" : "bg-transparent"}`} aria-hidden="true" />
+              </Link>
+            </li>
+          ))}
+        </ol>
+      </nav>
+
+      <h2 className="text-lg font-semibold">
+        {fullDate.format(at(day.date))}
+        {day.date === today ? <span className="ms-2 text-sm font-normal text-ink-muted">{s.today}</span> : null}
+      </h2>
+
+      {day.workout ? (
+        <Card className="flex flex-col gap-4">
+          <div className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-sky-soft text-sky">
+              <Dumbbell aria-hidden="true" className="size-5" />
+            </span>
+            <div className="flex flex-1 flex-col gap-0.5">
+              <h3 className="font-semibold">{day.workout.title}</h3>
+              <p className="text-sm text-ink-muted">{day.workout.why}</p>
+            </div>
+            <span className="inline-flex items-center gap-1 text-sm text-ink-muted">
+              <Clock aria-hidden="true" className="size-4" />
+              <span className="num">{day.workout.estimated_minutes}</span> {s.minutes}
+            </span>
+          </div>
+          <ol className="flex flex-col divide-y divide-line rounded-xl ring-1 ring-line">
+            {day.workout.blocks.map((b, i) => {
+              const ex = week.exercises.get(b.exercise_id);
+              return (
+                <li key={`${b.exercise_id}-${i}`} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <span className="font-medium">{ex?.name_he ?? s.unavailable}</span>
+                  <span className="num shrink-0 text-sm text-ink-muted" dir="rtl">
+                    {b.sets} × {b.reps !== undefined ? `${b.reps} ${s.reps}` : `${b.seconds} ${s.seconds}`} · {s.rest} {b.rest_seconds} {s.seconds}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </Card>
+      ) : (
+        <Card className="flex items-center gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-lilac-soft text-lilac">
+            <Moon aria-hidden="true" className="size-5" />
+          </span>
+          <p className="text-sm">{s.restDay}</p>
+        </Card>
+      )}
+
+      {day.meals.length ? (
+        <Card className="flex flex-col gap-3">
+          <h3 className="flex items-center gap-2 font-semibold">
+            <Salad aria-hidden="true" className="size-5 text-coral" />
+            {s.mealsTitle}
+          </h3>
+          <ul className="flex flex-col gap-3">
+            {day.meals.map((m, i) => {
+              const idea = week.meals.get(m.meal_idea_id);
+              const alts = m.alternatives.map((id) => week.meals.get(id)?.title_he).filter(Boolean);
+              return (
+                <li key={i} className="flex flex-col gap-0.5 border-s-2 border-coral/40 ps-3">
+                  <span className="text-xs text-ink-muted">{SLOT_HE[m.slot]}</span>
+                  <span className="font-medium">{idea?.title_he ?? s.unavailable}</span>
+                  {idea?.hint_he ? <span className="text-sm text-ink-muted">{idea.hint_he}</span> : null}
+                  {alts.length ? (
+                    <span className="text-xs text-ink-muted">
+                      {s.alternatives}: {alts.join(" · ")}
+                    </span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      ) : null}
+
+      <Card className="flex flex-col gap-3">
+        <h3 className="font-semibold">{s.habitsTitle}</h3>
+        <ul className="flex flex-col gap-2">
+          {day.habits.map((h, i) => {
+            const Icon = HABIT_ICON[h.type];
+            return (
+              <li key={i} className="flex items-center gap-3">
+                <Icon aria-hidden="true" className="size-5 text-lilac" />
+                <span>{h.title}</span>
+                {h.target ? <span className="text-sm text-ink-muted">{h.target}</span> : null}
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+
+      <Card className="flex flex-col gap-3">
+        <h3 className="font-semibold">{s.whyTitle}</h3>
+        <p className="text-sm leading-relaxed text-ink-muted">{plan.explanation}</p>
+        <dl className="grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-xl bg-field p-3">
+            <dt className="text-xs text-ink-muted">{s.targets.workouts}</dt>
+            <dd className="num text-lg font-semibold">{plan.targets.workouts_per_week}</dd>
+          </div>
+          <div className="rounded-xl bg-field p-3">
+            <dt className="text-xs text-ink-muted">{s.targets.water}</dt>
+            <dd className="num text-lg font-semibold">{plan.targets.water_ml ? (plan.targets.water_ml / 1000).toFixed(1) : "—"}</dd>
+          </div>
+          <div className="rounded-xl bg-field p-3">
+            <dt className="text-xs text-ink-muted">{s.targets.calories}</dt>
+            <dd className="num text-sm font-semibold" dir="ltr">
+              {plan.targets.calories_range ? `${plan.targets.calories_range[0]}–${plan.targets.calories_range[1]}` : "—"}
+            </dd>
+          </div>
+        </dl>
+        <ul className="list-disc ps-5 text-sm text-ink-muted">
+          {plan.summary.assumptions.map((a) => (
+            <li key={a}>{a}</li>
+          ))}
+        </ul>
+      </Card>
+
+      <CreatePlanButton again />
+      <p className="text-center text-xs text-ink-muted">{s.recreateNote}</p>
     </>
   );
 }
