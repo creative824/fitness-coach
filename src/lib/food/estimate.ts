@@ -10,11 +10,40 @@ import { foodItemSchema, type FoodItem } from "./items";
 
 export type EstimateResult =
   | { ok: true; items: FoodItem[]; question: string | null }
-  | { ok: false; reason: "no_key" | "not_food" | "failed" | "limit" };
+  | { ok: false; reason: "no_key" | "bad_key" | "busy" | "not_food" | "failed" | "limit" };
 
-const MODELS = [process.env.GEMINI_MODEL, "gemini-2.5-flash", "gemini-flash-latest"].filter(
-  (m, i, all): m is string => Boolean(m) && all.indexOf(m) === i,
-);
+/**
+ * Tried in order. A model that is missing, retired, over its free quota or overloaded is
+ * skipped, so one bad model name or one busy model does not stop the estimate.
+ */
+const MODELS = [
+  process.env.GEMINI_MODEL?.trim(),
+  "gemini-2.5-flash",
+  "gemini-flash-latest",
+  "gemini-2.5-flash-lite",
+  "gemini-flash-lite-latest",
+].filter((m, i, all): m is string => Boolean(m) && all.indexOf(m) === i);
+
+/** What a failed Gemini call means for the next step. Exported for tests. */
+export function classifyGeminiError(status: number, body: string): "bad_key" | "next_model" | "busy" | "failed" {
+  if (
+    /API_KEY_INVALID|API key not valid|API_KEY_SERVICE_BLOCKED|PERMISSION_DENIED|SERVICE_DISABLED/i.test(body) ||
+    status === 401 ||
+    status === 403
+  ) {
+    return "bad_key";
+  }
+  if (status === 404) return "next_model";
+  if (status === 429 || status === 500 || status === 503 || status === 504) return "busy";
+  // 400 for a reason other than the key: usually a model that rejects an option. Try the next.
+  if (status === 400) return "next_model";
+  return "failed";
+}
+
+/** Fast answers: the 2.5 models think by default, which adds seconds and can hit the timeout. */
+function thinkingFor(model: string) {
+  return model.startsWith("gemini-2.5") ? { thinkingConfig: { thinkingBudget: 0 } } : {};
+}
 
 const SYSTEM = `אתה עוזר להעריך מה אכל המשתמש מתוך תיאור חופשי בעברית.
 החזר רשימת פריטים. לכל פריט: שם קצר בעברית, כמות ויחידה אם נאמרו או אם אפשר להניח באופן סביר, אופן הכנה אם רלוונטי,
@@ -79,34 +108,48 @@ export function parseEstimate(raw: string): EstimateResult {
 }
 
 export async function estimateMeal(text: string): Promise<EstimateResult> {
-  const key = process.env.GEMINI_API_KEY;
+  // Pasted keys often carry a space, a newline or quotes.
+  const key = process.env.GEMINI_API_KEY?.trim().replace(/^["']|["']$/g, "");
   if (!key) return { ok: false, reason: "no_key" };
-  const body = JSON.stringify({
-    systemInstruction: { parts: [{ text: SYSTEM }] },
-    contents: [{ role: "user", parts: [{ text: text.slice(0, 1000) }] }],
-    generationConfig: { temperature: 0.2, responseMimeType: "application/json", responseSchema: RESPONSE_SCHEMA },
-  });
+  let last: EstimateResult = { ok: false, reason: "failed" };
   for (const model of MODELS) {
+    const body = JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM }] },
+      contents: [{ role: "user", parts: [{ text: text.slice(0, 1000) }] }],
+      generationConfig: { temperature: 0.2, responseMimeType: "application/json", responseSchema: RESPONSE_SCHEMA, ...thinkingFor(model) },
+    });
     try {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-goog-api-key": key },
         body,
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(25_000),
         cache: "no-store",
       });
-      if (res.status === 404) continue; // model name not available: try the next one
       if (!res.ok) {
-        console.error("estimateMeal failed", model, res.status);
-        return { ok: false, reason: "failed" };
+        const detail = (await res.text().catch(() => "")).slice(0, 500);
+        const kind = classifyGeminiError(res.status, detail);
+        console.error("estimateMeal failed", model, res.status, detail);
+        if (kind === "bad_key") return { ok: false, reason: "bad_key" };
+        if (kind === "failed") return { ok: false, reason: "failed" };
+        if (kind === "busy") last = { ok: false, reason: "busy" };
+        continue;
       }
-      const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-      const raw = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
-      return parseEstimate(raw);
+      const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[] };
+      const raw =
+        data.candidates?.[0]?.content?.parts
+          ?.filter((p) => !p.thought)
+          .map((p) => p.text ?? "")
+          .join("") ?? "";
+      const result = parseEstimate(raw);
+      if (result.ok || result.reason === "not_food") return result;
+      console.error("estimateMeal unreadable reply", model, raw.slice(0, 300));
+      last = result;
     } catch (e) {
+      // Timeout or network error: trying more models would only make the user wait longer.
       console.error("estimateMeal error", model, e instanceof Error ? e.message : e);
-      return { ok: false, reason: "failed" };
+      return { ok: false, reason: "busy" };
     }
   }
-  return { ok: false, reason: "failed" };
+  return last;
 }
