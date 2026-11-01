@@ -93,6 +93,26 @@ const S = {
     publisher: "International Society of Sports Nutrition (PubMed)",
     url: "https://pubmed.ncbi.nlm.nih.gov/28642676/",
   },
+  mifflin: {
+    title: "Mifflin et al. 1990: A new predictive equation for resting energy expenditure in healthy individuals",
+    publisher: "Am J Clin Nutr (PubMed)",
+    url: "https://pubmed.ncbi.nlm.nih.gov/2305711/",
+  },
+  frankenfield: {
+    title: "Frankenfield et al. 2005: Comparison of predictive equations for resting metabolic rate (systematic review)",
+    publisher: "J Am Diet Assoc (PubMed)",
+    url: "https://pubmed.ncbi.nlm.nih.gov/15883556/",
+  },
+  helms: {
+    title: "Helms et al. 2014: Evidence-based recommendations for natural bodybuilding contest preparation",
+    publisher: "J Int Soc Sports Nutr (PubMed)",
+    url: "https://pubmed.ncbi.nlm.nih.gov/24864135/",
+  },
+  iraki: {
+    title: "Iraki et al. 2019: Nutrition recommendations for bodybuilders in the off-season",
+    publisher: "Sports (PubMed)",
+    url: "https://pubmed.ncbi.nlm.nih.gov/31247944/",
+  },
 } satisfies Record<string, Source>;
 
 export const KNOWLEDGE = {
@@ -139,10 +159,10 @@ export const KNOWLEDGE = {
     sources: [S.harvardPlate, S.whoDiet, S.nhsEating],
   },
   calories: {
-    title: "טווח קלורי משוער",
-    body: "הטווח מחושב לפי גיל, גובה, משקל ורמת פעילות בנוסחה מקובלת (Mifflin-St Jeor), ומותאם בעדינות למטרה. זה אומדן ולא מספר מדויק: הצורך האמיתי משתנה מאדם לאדם ומיום ליום. לא מוצג טווח כשאין מספיק נתונים או כשזה לא מתאים בריאותית.",
-    general: "המספרים הם הערכה. אם יש רעב מתמשך או עייפות, זה סימן לבדוק את המסגרת.",
-    sources: [S.whoDiet, S.nhsEating],
+    title: "יעד קלורי",
+    body: "הצריכה היומית מחושבת בנוסחת Mifflin-St Jeor, שנמצאה המדויקת מבין הנוסחאות הנפוצות בסקירה שיטתית, כפול רמת הפעילות. לירידה במשקל מורידים כמות שמתאימה לירידה של כחצי אחוז ממשקל הגוף בשבוע: קצב איטי יותר עוזר לשמור על השריר. לבניית שריר מוסיפים כ-10%, כי תוספת גדולה יותר מוסיפה בעיקר שומן.",
+    general: "המספר הוא נקודת התחלה. הנוסחה יכולה לטעות בכ-10% לכל כיוון, ולכן אחרי שבועיים-שלושה מגמת המשקל בפועל אומרת יותר.",
+    sources: [S.mifflin, S.frankenfield, S.helms, S.iraki],
   },
 } satisfies Record<string, KnowledgeCard>;
 

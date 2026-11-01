@@ -339,6 +339,8 @@ export const he = {
         height_cm: "גובה (ס\"מ)",
         weight_kg: "משקל נוכחי (ק\"ג)",
         target_weight_kg: "משקל יעד (ק\"ג)",
+        sex: "מין",
+        sexHint: "משמש רק לחישוב הקלוריות. בלי זה הטווח יהיה רחב יותר.",
         goals: "מה הכי חשוב לך עכשיו? (עד 3)",
         dietary_pattern: "סגנון תזונה",
         allergies: "אלרגיות",
@@ -362,6 +364,7 @@ export const he = {
         busy_days: "ימים עמוסים במיוחד",
       },
       options: {
+        sex: { male: "גבר", female: "אישה" },
         goals: {
           lose_weight: "ירידה במשקל",
           maintain_weight: "שמירה על המשקל",

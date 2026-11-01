@@ -40,6 +40,7 @@ export async function generateWeekPlan(userId: string, weekStart: string): Promi
     age: d.age,
     heightCm: d.height_cm,
     weightKg: d.weight_kg,
+    sex: d.sex,
     activityLevel: d.activity_level,
     goals: d.goals,
     experience: d.experience,

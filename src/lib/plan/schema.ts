@@ -80,6 +80,8 @@ export const weeklyPlanSchema = z.object({
   targets: z.object({
     // Filled from code (src/lib/plan/targets.ts, phase 3), copied here for display.
     calories_range: z.tuple([z.int(), z.int()]).nullable(), // null when not appropriate (e.g. safety flag)
+    // The daily target inside the range; meals add up to it. Missing on plans saved before it existed.
+    calories_kcal: z.int().min(0).max(6000).nullable().optional(),
     // Personal daily water target, logged fill by fill (src/lib/water). Null under a medical restriction.
     water_ml: z.int().min(0).max(5000).nullable(),
     workouts_per_week: z.int().min(0).max(7),

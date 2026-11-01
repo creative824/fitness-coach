@@ -6,7 +6,8 @@ import { blockedTags, filterExercises, filterMeals, type ExerciseCandidate, type
 import { composeWeek, mealSlots, pickWorkoutDays, type ComposeInput } from "./generate";
 import { fitBlocks, REP_SECONDS, toMinutes, totalSeconds, warmupSeconds } from "./duration";
 import { planToTasks, pointsFor } from "./tasks";
-import { caloriesRange, computeTargets, type TargetInput } from "./targets";
+import { calorieTarget, caloriesRange, computeTargets, type TargetInput } from "./targets";
+import { mealRanges } from "@/lib/nutrition/frame";
 import { validatePlan } from "./validate";
 import { addDays, weekStartOf } from "./week";
 
@@ -83,6 +84,33 @@ describe("targets", () => {
     const [low, high] = caloriesRange(targetBase)!;
     expect(high).toBeGreaterThan(low);
     expect(low).toBeGreaterThanOrEqual(1400);
+  });
+  it("sizes a weight-loss deficit for about half a percent of body weight a week", () => {
+    const t = calorieTarget({ ...targetBase, weightKg: 90, sex: "male", goals: ["lose_weight"] })!;
+    expect(t.adjust).toBe(-500);
+    expect(t.kgPerWeek).toBeCloseTo(-0.45, 2);
+    expect(t.kcal).toBe(t.maintenance - 500);
+    expect(t.range[1] - t.range[0]).toBe(200);
+  });
+  it("keeps the deficit between 300 and 600 kcal", () => {
+    expect(calorieTarget({ ...targetBase, weightKg: 50, sex: "female", goals: ["lose_weight"] })!.adjust).toBe(-300);
+    expect(calorieTarget({ ...targetBase, weightKg: 160, sex: "male", goals: ["lose_weight"] })!.adjust).toBe(-600);
+  });
+  it("adds a small surplus for muscle", () => {
+    const t = calorieTarget({ ...targetBase, sex: "male", goals: ["muscle"] })!;
+    expect(t.adjust).toBeGreaterThanOrEqual(200);
+    expect(t.adjust).toBeLessThanOrEqual(400);
+  });
+  it("gives a wider range without sex", () => {
+    const t = calorieTarget(targetBase)!;
+    expect(t.precise).toBe(false);
+    expect(t.range[1] - t.range[0]).toBeGreaterThan(200);
+  });
+  it("splits the daily target between meals so the middles add up to it", () => {
+    const r = mealRanges(["breakfast", "snack", "lunch", "dinner"], [1900, 2100], 2000);
+    const mids = r.map((x) => (x![0] + x![1]) / 2);
+    expect(Math.abs(mids.reduce((a, b) => a + b, 0) - 2000)).toBeLessThanOrEqual(20);
+    expect(r[1]![1]).toBeLessThan(r[0]![0]);
   });
   it("gives no calorie range under a safety restriction", () => {
     expect(caloriesRange({ ...targetBase, safety: pregnant })).toBeNull();
@@ -219,6 +247,12 @@ describe("tasks", () => {
     const sunday = tasks.filter((t) => t.date === "2026-11-01");
     expect(sunday.map((t) => t.type)).toEqual(["meal", "meal", "meal", "workout", "water", "recovery"]);
     expect(new Set(tasks.map((t) => `${t.date}:${t.sort_order}`)).size).toBe(tasks.length);
+  });
+  it("puts each meal's estimated calories in its task title", () => {
+    const plan = composeWeek(input());
+    const meal = planToTasks(plan, new Map(allMeals.map((m) => [m.id, m.title_he]))).find((t) => t.type === "meal")!;
+    expect(plan.targets.calories_kcal).toBeGreaterThan(0);
+    expect(meal.title).toMatch(/\d+–\d+ קל׳$/);
   });
   it("gives half points for a partial outcome", () => {
     expect(pointsFor("workout", "done")).toBe(20);
