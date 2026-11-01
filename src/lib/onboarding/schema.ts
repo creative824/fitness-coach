@@ -22,6 +22,7 @@ export const DIETARY_PATTERNS = ["omnivore", "vegetarian", "vegan", "pescatarian
 export const EXPERIENCE = ["beginner", "intermediate", "advanced"] as const;
 export const LOCATIONS = ["home", "gym", "outdoors"] as const;
 export const EQUIPMENT = ["none", "mat", "dumbbells", "kettlebell", "bands", "pullup_bar", "bench", "machines", "barbell"] as const;
+export const SEXES = ["male", "female"] as const;
 export const ACTIVITY_LEVELS = ["sedentary", "light", "moderate", "active", "very_active"] as const;
 export const DAYS = [0, 1, 2, 3, 4, 5, 6] as const; // 0 = Sunday
 
@@ -49,6 +50,7 @@ export const stepSchemas = {
     height_cm: z.number().min(120).max(230),
     weight_kg: z.number().min(35).max(300),
     target_weight_kg: z.number().min(35).max(300).nullable(),
+    sex: z.enum(SEXES).nullable(),
   }),
   goals: z.object({
     goals: z.array(z.enum(GOAL_TYPES)).min(1).max(3),
@@ -91,6 +93,8 @@ export interface OnboardingDraft {
   height_cm: number | null;
   weight_kg: number | null;
   target_weight_kg: number | null;
+  /** Optional; only used to estimate calories more precisely. */
+  sex: (typeof SEXES)[number] | null;
   goals: GoalType[];
   dietary_pattern: (typeof DIETARY_PATTERNS)[number] | null;
   allergies: (typeof ALLERGENS)[number][];
@@ -118,6 +122,7 @@ export const emptyDraft = (): OnboardingDraft => ({
   height_cm: null,
   weight_kg: null,
   target_weight_kg: null,
+  sex: null,
   goals: [],
   dietary_pattern: null,
   allergies: [],
@@ -146,6 +151,7 @@ export const draftSchema = z.object({
   height_cm: z.number().min(50).max(260).nullable(),
   weight_kg: z.number().min(20).max(400).nullable(),
   target_weight_kg: z.number().min(20).max(400).nullable(),
+  sex: z.enum(SEXES).nullable().default(null),
   goals: z.array(z.enum(GOAL_TYPES)).max(3),
   dietary_pattern: z.enum(DIETARY_PATTERNS).nullable(),
   allergies: z.array(z.enum(ALLERGENS)),

@@ -47,6 +47,10 @@ export function personalNote(topic: KnowledgeTopic, { draft: d, plan }: Personal
     case "calories": {
       const r = plan?.targets.calories_range;
       if (!r) return null;
+      const k = plan?.targets.calories_kcal;
+      if (k) {
+        return `היעד שלך, כ-${k.toLocaleString("en-US")} קלוריות ביום, מחושב לפי הגיל, הגובה, המשקל והפעילות שמילאת${has(d, "lose_weight") ? ", עם גירעון מתון" : has(d, "muscle") || has(d, "gain_weight") ? ", עם תוספת קטנה" : ""}. הארוחות בתוכנית מתחלקות כך שיחד הן מגיעות אליו.`;
+      }
       return `הטווח שלך, ${r[0]}–${r[1]} קלוריות ביום, הוא הערכה לפי הגיל, הגובה, המשקל והפעילות שמילאת${has(d, "lose_weight") ? ", עם גירעון מתון" : has(d, "muscle") || has(d, "gain_weight") ? ", עם תוספת מתונה" : ""}.`;
     }
   }

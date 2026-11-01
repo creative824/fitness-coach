@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/data/user";
 import { createClient } from "@/lib/supabase/server";
 import { localDay } from "@/lib/water/time";
 import { estimateMeal, type EstimateResult } from "./estimate";
+import { DAILY_ESTIMATE_LIMIT } from "./limits";
 import { saveFoodSchema } from "./items";
 
 const text = z.string().trim().min(2).max(1000);
@@ -15,6 +16,11 @@ export async function analyzeFood(input: string): Promise<EstimateResult> {
   const parsed = text.safeParse(input);
   if (!parsed.success) return { ok: false, reason: "failed" };
   await requireUser();
+  const supabase = await createClient();
+  const { data: allowed, error } = await supabase.rpc("take_ai_quota", { p_kind: "food_estimate", p_limit: DAILY_ESTIMATE_LIMIT });
+  // Fails open if the quota check itself errors (e.g. migration not applied yet), so logging still works.
+  if (error) console.error("take_ai_quota failed", error.message);
+  else if (allowed === false) return { ok: false, reason: "limit" };
   return estimateMeal(parsed.data);
 }
 

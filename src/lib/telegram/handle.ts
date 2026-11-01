@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { estimateMeal } from "@/lib/food/estimate";
+import { DAILY_ESTIMATE_LIMIT } from "@/lib/food/limits";
 import { totalsOf, type FoodItem } from "@/lib/food/items";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { DEFAULT_VESSEL_ML, dailyWaterTargetMl } from "@/lib/water/plan";
@@ -242,7 +243,11 @@ function itemLine(i: FoodItem, numbers: boolean) {
 
 async function logFood(db: SupabaseClient, userId: string, chatId: number, date: string, text: string) {
   const numbers = await tracking(db, userId);
-  const est = numbers ? await estimateMeal(text) : null;
+  // Over the daily AI limit the meal is still saved, just without an estimate.
+  const quota = numbers
+    ? await db.rpc("take_ai_quota_as", { p_user: userId, p_kind: "food_estimate", p_limit: DAILY_ESTIMATE_LIMIT })
+    : null;
+  const est = numbers && quota?.data !== false ? await estimateMeal(text) : null;
   if (est && !est.ok && est.reason === "not_food") return send(chatId, `לא בטוח שהבנתי. ${HELP}`);
   const items = est?.ok ? est.items : [];
   const { data: id, error } = await db.rpc("save_food_log_as", {

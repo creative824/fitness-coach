@@ -17,12 +17,14 @@ import {
   LOCATIONS,
   MIN_AGE,
   SAFETY_QUESTIONS,
+  SEXES,
   STEP_ORDER,
   stepErrors,
   type OnboardingDraft,
   type StepKey,
 } from "@/lib/onboarding/schema";
 import { allowedGoals, screenSafety } from "@/lib/safety/screen";
+import { CalorieTargetCard } from "./calorie-target";
 import { ChipGroup, ListField, NumberField, TextField, YesNo } from "./fields";
 
 const t = getDictionary();
@@ -138,6 +140,7 @@ export function Questionnaire({ initial, initialStep }: { initial: OnboardingDra
             <NumberField label={f.height_cm} value={draft.height_cm} min={120} max={230} invalid={bad("height_cm")} onChange={(v) => set("height_cm", v)} />
             <NumberField label={f.weight_kg} value={draft.weight_kg} min={35} max={300} step={0.1} invalid={bad("weight_kg")} onChange={(v) => set("weight_kg", v)} />
           </div>
+          <ChipGroup label={`${f.sex} ${s.optional}`} hint={f.sexHint} options={opts(SEXES, o.sex)} value={draft.sex ? [draft.sex] : []} onChange={(v) => set("sex", v[0] ?? null)} />
           <NumberField label={`${f.target_weight_kg} ${s.optional}`} value={draft.target_weight_kg} min={35} max={300} step={0.1} invalid={bad("target_weight_kg")} onChange={(v) => set("target_weight_kg", v)} />
         </Card>
       )}
@@ -322,6 +325,7 @@ function Summary({ draft, onEdit }: { draft: OnboardingDraft; onEdit: (step: num
           {s.edit}
         </button>
       </Card>
+      <CalorieTargetCard draft={draft} safety={safety} goals={goals} />
       {rows.map((section) => (
         <Card key={section.step} className="flex flex-col gap-3">
           <div className="flex items-center justify-between">

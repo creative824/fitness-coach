@@ -4,6 +4,7 @@
  * Points per task type mirror public.task_points() in supabase/migrations/0004_daily_loop.sql.
  * The database is authoritative: it ignores any points sent by the app.
  */
+import { mealRanges } from "@/lib/nutrition/frame";
 import type { WeeklyPlan } from "./schema";
 
 export type TaskType = "meal" | "workout" | "movement" | "water" | "recovery" | "habit";
@@ -40,12 +41,20 @@ export const SLOT_HE = { breakfast: "ארוחת בוקר", lunch: "ארוחת צ
 export function planToTasks(plan: WeeklyPlan, mealTitles: Map<string, string>): TaskDraft[] {
   const tasks: TaskDraft[] = [];
   plan.days.forEach((day, dayIndex) => {
+    const ranges = mealRanges(
+      day.meals.map((m) => m.slot),
+      plan.targets.calories_range,
+      plan.targets.calories_kcal,
+    );
     day.meals.forEach((meal, i) => {
       const idea = mealTitles.get(meal.meal_idea_id) ?? "";
+      // The estimated calories are part of the title, so "My day" shows them up front.
+      const r = ranges[i];
+      const kcal = r ? ` · ${r[0]}–${r[1]} קל׳` : "";
       tasks.push({
         date: day.date,
         type: "meal",
-        title: `${SLOT_HE[meal.slot]}: ${idea}`.slice(0, 200),
+        title: `${SLOT_HE[meal.slot]}: ${idea}${kcal}`.slice(0, 200),
         ref: { day: dayIndex, meal: i, meal_idea_id: meal.meal_idea_id },
         sort_order: i,
       });

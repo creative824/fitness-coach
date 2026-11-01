@@ -45,9 +45,9 @@ const TASK = "bbbbbbbb-0000-0000-0000-000000000001";
 await db.exec(`
   insert into auth.users (id) values ('${A}'), ('${B}');
   insert into public.profiles (user_id, display_name) values ('${A}', 'alice'), ('${B}', 'bob');
-  insert into public.plans (id, user_id, week_start, plan_json) values ('${PLAN}', '${A}', '2026-11-01', '{}');
+  insert into public.plans (id, user_id, week_start, plan_json) values ('${PLAN}', '${A}', '2020-01-05', '{}');
   insert into public.daily_tasks (id, plan_id, user_id, date, type, title, points)
-    values ('${TASK}', '${PLAN}', '${A}', '2026-11-01', 'water', 'water', 5);
+    values ('${TASK}', '${PLAN}', '${A}', '2020-01-05', 'water', 'water', 5);
   insert into public.task_completions (task_id, user_id, outcome, points_awarded) values ('${TASK}', '${A}', 'done', 5);
   insert into public.exercises (slug, name_he, instructions_he, difficulty, review_status)
     values ('pushup', 'שכיבות סמיכה', 'x', 'beginner', 'approved'), ('draft-one', 'טיוטה', 'x', 'beginner', 'draft');
@@ -151,16 +151,22 @@ r = await as(A, `insert into food_log_items (food_log_id, user_id, item_name, kc
 check("an estimate range cannot be upside down", Boolean(r.error));
 
 // ── phase 3: saving a plan and scoring tasks go through security-definer functions ──
+// Dates are relative to today, because a plan can only be saved for this week or the next.
+const iso = (d) => d.toISOString().slice(0, 10);
+const addDays = (s, n) => iso(new Date(Date.parse(`${s}T00:00:00Z`) + n * 86400000));
+const TD = iso(new Date());
+const WS = addDays(TD, -new Date(`${TD}T00:00:00Z`).getUTCDay());
+const NWS = addDays(WS, 7);
 const tasksJson = JSON.stringify([
-  { date: "2026-10-25", type: "workout", title: "אימון", sort_order: 10, points: 25 },
-  { date: "2026-10-25", type: "water", title: "מים", sort_order: 20 },
+  { date: TD, type: "workout", title: "אימון", sort_order: 10, points: 25 },
+  { date: TD, type: "water", title: "מים", sort_order: 20 },
 ]);
-r = await as(A, `select save_week_plan('2026-10-25', '{"schema_version":1}', '${tasksJson}') as id`);
+r = await as(A, `select save_week_plan('${WS}', '{"schema_version":1}', '${tasksJson}') as id`);
 check("user saves own plan through save_week_plan", Boolean(r.rows?.[0].id));
-r = await as(A, "select type, points from daily_tasks where date = '2026-10-25' order by sort_order");
+r = await as(A, `select type, points from daily_tasks where date = '${TD}' order by sort_order`);
 check("task points are set by the database, not the client", r.rows?.[0].points === 20 && r.rows?.[1].points === 5);
 
-r = await as(A, "select id from daily_tasks where date = '2026-10-25' and type = 'workout'");
+r = await as(A, `select id from daily_tasks where date = '${TD}' and type = 'workout'`);
 const W = r.rows?.[0].id;
 r = await as(A, `select set_task_outcome('${W}', 'done')`);
 r = await as(A, `select set_task_outcome('${W}', 'done')`);
@@ -173,24 +179,59 @@ check("partial counts half", r.rows?.[0].points_awarded === 10);
 r = await as(B, `select set_task_outcome('${W}', 'done')`);
 check("user cannot mark another user's task", Boolean(r.error));
 
-r = await as(A, `select save_week_plan('2026-10-25', '{"schema_version":1}', '${tasksJson}') as id`);
-r = await as(A, "select count(*)::int as n, count(*) filter (where status = 'active')::int as a from plans where week_start = '2026-10-25'");
+r = await as(A, `select save_week_plan('${WS}', '{"schema_version":1}', '${tasksJson}') as id`);
+r = await as(A, `select count(*)::int as n, count(*) filter (where status = 'active')::int as a from plans where week_start = '${WS}'`);
 check("regenerating keeps one active version", r.rows?.[0].n === 2 && r.rows?.[0].a === 1);
 r = await as(A, `select count(*)::int as n from daily_tasks d join plans p on p.id = d.plan_id
-  where p.status = 'active' and p.week_start = '2026-10-25'`);
+  where p.status = 'active' and p.week_start = '${WS}'`);
 check("regenerating keeps completed tasks without duplicates", r.rows?.[0].n === 2);
-r = await as(A, `select sum(points_awarded)::int as p from task_completions c join daily_tasks d on d.id = c.task_id where d.date = '2026-10-25'`);
+r = await as(A, `select sum(points_awarded)::int as p from task_completions c join daily_tasks d on d.id = c.task_id where d.date = '${TD}'`);
 check("regenerating does not double points", r.rows?.[0].p === 10);
 
-r = await as(A, `select save_week_plan('2026-11-09', '{}', '[]')`);
+r = await as(A, `select save_week_plan('${addDays(WS, 1)}', '{}', '[]')`);
 check("plan weeks start on Sunday", Boolean(r.error));
-r = await as(A, `select save_week_plan('2026-11-15', '{}', '[{"date":"2026-11-30","type":"water","title":"x"}]')`);
+r = await as(A, `select save_week_plan('${NWS}', '{}', '[{"date":"${addDays(NWS, 14)}","type":"water","title":"x"}]')`);
 check("tasks must fall inside the plan week", Boolean(r.error));
 
-r = await as(A, `select save_week_plan('2099-01-04', '{}', '[{"date":"2099-01-04","type":"water","title":"x"}]')`);
-r = await as(A, "select id from daily_tasks where date = '2099-01-04'");
+r = await as(A, `select save_week_plan('${NWS}', '{}', '[{"date":"${addDays(NWS, 6)}","type":"water","title":"x"}]')`);
+r = await as(A, `select id from daily_tasks where date = '${addDays(NWS, 6)}'`);
 r = await as(A, `select set_task_outcome('${r.rows?.[0].id}', 'done')`);
 check("future tasks cannot be marked", Boolean(r.error));
+
+// ── review fixes (0007): points cannot be inflated from the browser ──
+r = await as(A, `select save_week_plan('${addDays(WS, -14)}', '{}', '[{"date":"${addDays(WS, -14)}","type":"water","title":"x"}]')`);
+check("a plan cannot be saved for a past week", Boolean(r.error));
+r = await as(A, `select save_week_plan('${addDays(WS, 28)}', '{}', '[]')`);
+check("a plan cannot be saved weeks ahead", Boolean(r.error));
+const stuffed = JSON.stringify(Array.from({ length: 5 }, (_, i) => ({ date: TD, type: "workout", title: "x", sort_order: 10 + i })));
+r = await as(A, `select save_week_plan('${WS}', '{}', '${stuffed}')`);
+check("a day cannot hold more workouts than a real plan", Boolean(r.error));
+await db.exec(`insert into daily_tasks (id, plan_id, user_id, date, type, title, points)
+  values ('bbbbbbbb-0000-0000-0000-000000000009', '${PLAN}', '${A}', '${addDays(TD, -5)}', 'water', 'old', 5)`);
+r = await as(A, `select set_task_outcome('bbbbbbbb-0000-0000-0000-000000000009', 'done')`);
+check("a task cannot be marked days after its date", Boolean(r.error));
+
+r = await as(A, "select take_ai_quota('food_estimate', 2) as ok");
+r = await as(A, "select take_ai_quota('food_estimate', 2) as ok");
+const second = r.rows?.[0].ok;
+r = await as(A, "select take_ai_quota('food_estimate', 2) as ok");
+check("the daily AI limit stops the call after the limit", second === true && r.rows?.[0].ok === false);
+r = await as(A, `insert into ai_usage (user_id, day, kind, calls) values ('${B}', current_date, 'coach', 0)`);
+check("users cannot write AI usage directly", Boolean(r.error));
+r = await as(A, `select take_ai_quota_for('${B}', 'coach', 5)`);
+check("users cannot spend another user's AI quota", Boolean(r.error));
+r = await as(A, `select take_ai_quota_as('${B}', 'coach', 5)`);
+check("users cannot use the bot's AI quota function", Boolean(r.error));
+
+r = await as(A, `update profiles set disabled_at = now() where user_id = '${A}' returning disabled_at`);
+check("a user cannot set disabled_at on their own profile", r.rows?.length === 1 && r.rows[0].disabled_at === null);
+await as(B, "update exercises set name_he = 'שכיבות סמיכה רחבות' where slug = 'pushup'", { role: "admin" });
+r = await db.query(`select meta from audit_logs where entity = 'exercises' and action = 'update' and actor = '${B}'`);
+check("admin content changes are written to the audit log", r.rows.length === 1 && r.rows[0].meta.after.name_he === "שכיבות סמיכה רחבות");
+
+r = await db.query(`select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity`);
+check(`every public table has RLS on${r.rows.length ? ` (missing: ${r.rows.map((x) => x.relname).join(", ")})` : ""}`, r.rows.length === 0);
 
 r = await as(A, `insert into weight_logs (user_id, date, weight_kg) values ('${A}', '2026-11-01', 74.5) returning 1`);
 check("user logs own weight", r.rows?.length === 1);

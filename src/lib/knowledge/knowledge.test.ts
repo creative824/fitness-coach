@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KNOWLEDGE, type KnowledgeTopic } from "@/content/knowledge";
+import { EVIDENCE_LABEL, KNOWLEDGE, strongestEvidence, type KnowledgeTopic } from "@/content/knowledge";
 import { emptyDraft } from "@/lib/onboarding/schema";
 import { compareWeeks, summarizeWeek } from "@/lib/progress/trend";
 import { GOAL_GUIDE, goalKind, mealFrame, mealRanges } from "@/lib/nutrition/frame";
@@ -13,6 +13,13 @@ describe("knowledge cards (follow-up spec §2)", () => {
       expect(sentences, k).toBeLessThanOrEqual(4);
       expect(c.sources.length, k).toBeGreaterThan(0);
       for (const s of c.sources) expect(s.url.startsWith("https://"), k).toBe(true);
+    }
+  });
+  it("every card says what is uncertain and labels each source's kind of evidence", () => {
+    for (const [k, c] of Object.entries(KNOWLEDGE)) {
+      expect(c.uncertain.length, k).toBeGreaterThan(20);
+      for (const s of c.sources) expect(EVIDENCE_LABEL[s.kind], k).toBeTruthy();
+      expect(strongestEvidence(c), k).toBeTruthy();
     }
   });
   it("says nothing personal without real data", () => {

@@ -13,13 +13,22 @@ const SHARE: Record<Slot, number> = { breakfast: 25, lunch: 35, dinner: 30, snac
 
 const round50 = (n: number) => Math.round(n / 50) * 50;
 
+const round10 = (n: number) => Math.round(n / 10) * 10;
+
 /**
- * Estimated calories per meal, only when the plan has a daily range. Returned as a range,
- * never a single number.
+ * Estimated calories per meal, only when the plan has a daily target. Returned as a range,
+ * never a single number. With a daily target (kcal) each meal gets its share of it, ±8%, so
+ * the middles of the meals add up to the target. Older plans have only a daily range.
  */
-export function mealRanges(slots: Slot[], daily: [number, number] | null): ([number, number] | null)[] {
+export function mealRanges(slots: Slot[], daily: [number, number] | null, kcal?: number | null): ([number, number] | null)[] {
   if (!daily || !slots.length) return slots.map(() => null);
   const total = slots.reduce((s, x) => s + SHARE[x], 0);
+  if (kcal) {
+    return slots.map((x) => {
+      const mid = (kcal * SHARE[x]) / total;
+      return [round10(mid * 0.92), round10(mid * 1.08)];
+    });
+  }
   return slots.map((x) => {
     const f = SHARE[x] / total;
     const lo = round50(daily[0] * f);

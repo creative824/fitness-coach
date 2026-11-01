@@ -63,7 +63,7 @@ export function validatePlan(raw: unknown, ctx: ValidationContext): ValidationRe
   });
   const workouts = plan.days.filter((d) => d.workout).length;
   if (workouts !== plan.targets.workouts_per_week) issues.push("workout count does not match the target");
-  if (r.noCalorieTarget && plan.targets.calories_range) issues.push("calorie range despite safety restriction");
+  if (r.noCalorieTarget && (plan.targets.calories_range || plan.targets.calories_kcal)) issues.push("calorie range despite safety restriction");
 
   return issues.length ? { ok: false, issues } : { ok: true, plan };
 }

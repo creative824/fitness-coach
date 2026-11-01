@@ -80,6 +80,7 @@ async function Plan({ searchParams }: { searchParams: PageProps<"/plan">["search
   const ranges = mealRanges(
     day.meals.map((m) => m.slot),
     plan.targets.calories_range,
+    plan.targets.calories_kcal,
   );
   const ctx = { draft, plan };
   const stale = plan.days.some((d) => d.workout && (d.workout.budget_minutes === undefined || (budget && d.workout.estimated_minutes > budget)));
@@ -148,6 +149,7 @@ async function Plan({ searchParams }: { searchParams: PageProps<"/plan">["search
         <MealsCard
           key={selected}
           guide={GOAL_GUIDE[goal]}
+          dailyKcal={plan.targets.calories_kcal ?? null}
           platePersonal={personalNote("plate", ctx)}
           caloriesPersonal={personalNote("calories", ctx)}
           meals={day.meals.map((m, i) => {
@@ -204,7 +206,11 @@ async function Plan({ searchParams }: { searchParams: PageProps<"/plan">["search
               <InfoButton topic="calories" personal={personalNote("calories", ctx)} />
             </dt>
             <dd className="num text-sm font-semibold" dir="ltr">
-              {plan.targets.calories_range ? `${plan.targets.calories_range[0]}–${plan.targets.calories_range[1]}` : "—"}
+              {plan.targets.calories_kcal
+                ? `~${plan.targets.calories_kcal.toLocaleString("en-US")}`
+                : plan.targets.calories_range
+                  ? `${plan.targets.calories_range[0]}–${plan.targets.calories_range[1]}`
+                  : "—"}
             </dd>
           </div>
         </dl>

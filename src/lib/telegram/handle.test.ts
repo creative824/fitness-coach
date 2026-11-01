@@ -91,6 +91,19 @@ describe("telegram bot", () => {
     expect(sent[0].text).toContain("הערכה");
   });
 
+  it("still saves the meal, without an estimate, over the daily AI limit", async () => {
+    tables.telegram_links = [{ user_id: "user-1" }];
+    tables.profiles = [{ calorie_tracking: true, water_vessel_ml: 250 }];
+    rpcResult.take_ai_quota_as = false;
+    rpcResult.save_food_log_as = "11111111-1111-4111-8111-111111111111";
+    await handleUpdate(msg(6, "אכלתי סנדוויץ' עם טונה"));
+    const quota = calls.find((c) => c.rpc === "take_ai_quota_as");
+    expect(quota?.args[0]).toMatchObject({ p_user: "user-1", p_kind: "food_estimate" });
+    const call = calls.find((c) => c.rpc === "save_food_log_as");
+    expect(call?.args[0]).toMatchObject({ p_user: "user-1", p_estimated: false });
+    expect(sent[0].text).not.toContain("300–420");
+  });
+
   it("unlinks on request", async () => {
     tables.telegram_links = [{ user_id: "user-1" }];
     await handleUpdate(msg(5, "/unlink"));

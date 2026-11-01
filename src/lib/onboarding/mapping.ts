@@ -16,6 +16,8 @@ export interface ProfileRow {
   sleep_hours: number | null;
   water_cups_now: number | null;
   busy_days: number[];
+  /** Small optional answers that have no column of their own. */
+  preferences?: { sex?: string | null };
   safety_flags: { answers?: Partial<Record<SafetyQuestion, boolean | null>>; result?: SafetyResult; evaluated_at?: string };
   onboarding_step: number;
   onboarding_completed_at?: string | null;
@@ -70,6 +72,7 @@ export function draftToRows(userId: string, d: OnboardingDraft, step: number, no
     sleep_hours: d.sleep_hours,
     water_cups_now: d.water_cups_now,
     busy_days: d.busy_days,
+    preferences: { sex: d.sex },
     safety_flags: { answers: d.answers, result: safety, evaluated_at: now.toISOString() },
     onboarding_step: step,
   };
@@ -117,6 +120,8 @@ export function rowsToDraft(
     d.sleep_hours = num(p.sleep_hours) ?? d.sleep_hours;
     d.water_cups_now = p.water_cups_now ?? null;
     d.busy_days = p.busy_days ?? [];
+    const sex = p.preferences?.sex;
+    d.sex = sex === "male" || sex === "female" ? sex : null;
     const answers = p.safety_flags?.answers ?? {};
     for (const q of SAFETY_QUESTIONS) d.answers[q] = answers[q] ?? null;
   }
