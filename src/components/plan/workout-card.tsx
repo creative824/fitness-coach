@@ -1,6 +1,7 @@
 import { Clock, Dumbbell, Timer } from "lucide-react";
 import Link from "next/link";
 import { ExerciseCard } from "@/components/exercise/exercise-card";
+import { InfoButton } from "@/components/knowledge/info-button";
 import { Card } from "@/components/ui/card";
 import { EXERCISES } from "@/content/exercises";
 import { blockSeconds, PER_SIDE, toMinutes, warmupSeconds } from "@/lib/plan/duration";
@@ -20,12 +21,14 @@ export function WorkoutCard({
   date,
   dayIndex,
   showFull,
+  strengthNote = null,
 }: {
   workout: NonNullable<PlanDay["workout"]>;
   exercises: Map<string, ExerciseInfo>;
   date: string;
   dayIndex: number;
   showFull: boolean;
+  strengthNote?: string | null;
 }) {
   const full = showFull && workout.full ? workout.full : null;
   const blocks = full?.blocks ?? workout.blocks;
@@ -38,7 +41,10 @@ export function WorkoutCard({
           <Dumbbell aria-hidden="true" className="size-5" />
         </span>
         <div className="flex flex-1 flex-col gap-0.5">
-          <h3 className="font-semibold">{workout.title}</h3>
+          <h3 className="flex items-center gap-1 font-semibold">
+            {workout.title}
+            <InfoButton topic="strength" personal={strengthNote} />
+          </h3>
           <p className="text-sm text-ink-muted">{workout.why}</p>
         </div>
         <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-accent px-3 py-1 text-sm font-semibold text-ink">

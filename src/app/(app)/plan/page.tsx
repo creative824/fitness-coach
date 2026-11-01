@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
-import { CalendarDays, Footprints, Droplets, Moon, Salad, Sparkles } from "lucide-react";
+import { CalendarDays, Footprints, Droplets, Moon, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { CreatePlanButton } from "@/components/plan/create-plan-button";
+import { InfoButton } from "@/components/knowledge/info-button";
+import { MealsCard } from "@/components/plan/meals-card";
 import { WhyCard } from "@/components/plan/why-card";
+import { personalNote } from "@/lib/knowledge/personal";
+import { GOAL_GUIDE, goalKind, mealFrame, mealRanges } from "@/lib/nutrition/frame";
 import { WorkoutCard } from "@/components/plan/workout-card";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -72,6 +76,12 @@ async function Plan({ searchParams }: { searchParams: PageProps<"/plan">["search
   const why = whyThisPlan(draft, plan, screenSafety(draft));
   // Plans saved before the time fix may run over the minutes the user has (follow-up spec §4).
   const budget = draft.session_minutes;
+  const goal = goalKind(draft);
+  const ranges = mealRanges(
+    day.meals.map((m) => m.slot),
+    plan.targets.calories_range,
+  );
+  const ctx = { draft, plan };
   const stale = plan.days.some((d) => d.workout && (d.workout.budget_minutes === undefined || (budget && d.workout.estimated_minutes > budget)));
 
   return (
@@ -122,41 +132,37 @@ async function Plan({ searchParams }: { searchParams: PageProps<"/plan">["search
           date={day.date}
           dayIndex={selected}
           showFull={sp.full === "1"}
+          strengthNote={personalNote("strength", ctx)}
         />
       ) : (
         <Card className="flex items-center gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-lilac-soft text-lilac">
             <Moon aria-hidden="true" className="size-5" />
           </span>
-          <p className="text-sm">{s.restDay}</p>
+          <p className="flex-1 text-sm">{s.restDay}</p>
+          <InfoButton topic="rest" personal={personalNote("rest", ctx)} />
         </Card>
       )}
 
       {day.meals.length ? (
-        <Card className="flex flex-col gap-3">
-          <h3 className="flex items-center gap-2 font-semibold">
-            <Salad aria-hidden="true" className="size-5 text-coral" />
-            {s.mealsTitle}
-          </h3>
-          <ul className="flex flex-col gap-3">
-            {day.meals.map((m, i) => {
-              const idea = week.meals.get(m.meal_idea_id);
-              const alts = m.alternatives.map((id) => week.meals.get(id)?.title_he).filter(Boolean);
-              return (
-                <li key={i} className="flex flex-col gap-0.5 border-s-2 border-coral/40 ps-3">
-                  <span className="text-xs text-ink-muted">{SLOT_HE[m.slot]}</span>
-                  <span className="font-medium">{idea?.title_he ?? s.unavailable}</span>
-                  {idea?.hint_he ? <span className="text-sm text-ink-muted">{idea.hint_he}</span> : null}
-                  {alts.length ? (
-                    <span className="text-xs text-ink-muted">
-                      {s.alternatives}: {alts.join(" · ")}
-                    </span>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-        </Card>
+        <MealsCard
+          key={selected}
+          guide={GOAL_GUIDE[goal]}
+          platePersonal={personalNote("plate", ctx)}
+          caloriesPersonal={personalNote("calories", ctx)}
+          meals={day.meals.map((m, i) => {
+            const idea = week.meals.get(m.meal_idea_id);
+            const frame = mealFrame(m.slot, draft, goal, selected);
+            return {
+              slotLabel: SLOT_HE[m.slot],
+              range: ranges[i],
+              groups: frame.groups,
+              examples: frame.examples,
+              idea: idea ? { title: idea.title_he, hint: idea.hint_he } : null,
+              alternatives: m.alternatives.map((id) => week.meals.get(id)?.title_he).filter((x): x is string => Boolean(x)),
+            };
+          })}
+        />
       ) : null}
 
       <Card className="flex flex-col gap-3">
@@ -186,11 +192,17 @@ async function Plan({ searchParams }: { searchParams: PageProps<"/plan">["search
             <dd className="num text-lg font-semibold">{plan.targets.workouts_per_week}</dd>
           </div>
           <div className="rounded-xl bg-field p-3">
-            <dt className="text-xs text-ink-muted">{s.targets.water}</dt>
+            <dt className="flex items-center justify-center text-xs text-ink-muted">
+              {s.targets.water}
+              <InfoButton topic="water" personal={personalNote("water", ctx)} />
+            </dt>
             <dd className="num text-lg font-semibold">{plan.targets.water_ml ? (plan.targets.water_ml / 1000).toFixed(1) : "—"}</dd>
           </div>
           <div className="rounded-xl bg-field p-3">
-            <dt className="text-xs text-ink-muted">{s.targets.calories}</dt>
+            <dt className="flex items-center justify-center text-xs text-ink-muted">
+              {s.targets.calories}
+              <InfoButton topic="calories" personal={personalNote("calories", ctx)} />
+            </dt>
             <dd className="num text-sm font-semibold" dir="ltr">
               {plan.targets.calories_range ? `${plan.targets.calories_range[0]}–${plan.targets.calories_range[1]}` : "—"}
             </dd>

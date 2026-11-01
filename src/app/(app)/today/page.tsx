@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowLeft, CalendarDays, ClipboardList, Sparkles } from "lucide-react";
+import { ArrowLeft, CalendarDays, ClipboardList, Salad, Sparkles } from "lucide-react";
 import { Suspense } from "react";
 import { ButtonLink } from "@/components/ui/button";
 import { CreatePlanButton } from "@/components/plan/create-plan-button";
@@ -14,9 +14,11 @@ import { loadOnboarding } from "@/lib/onboarding/data";
 import { loadDayTasks, loadWeek } from "@/lib/plan/data";
 import { weekdayOf, weekStartOf } from "@/lib/plan/week";
 import { whyThisPlan } from "@/lib/plan/why";
+import { personalNote } from "@/lib/knowledge/personal";
 import { screenSafety } from "@/lib/safety/screen";
 import { loadWaterToday } from "@/lib/water/data";
 import { localDay } from "@/lib/water/time";
+import { loadFoodDay } from "@/lib/food/data";
 
 const t = getDictionary();
 const s = t.screens.today;
@@ -35,14 +37,20 @@ export default function TodayPage() {
 async function Today() {
   const user = await requireUser();
   const { date, minutes } = localDay(new Date());
-  const [profile, day, water, week, onboarding] = await Promise.all([
+  const [profile, day, water, week, onboarding, food] = await Promise.all([
     getProfileSummary(user.id),
     loadDayTasks(user.id, date).catch(() => ({ hasPlan: false, tasks: [] })),
     // Hidden if the 0002 migration has not run yet.
     loadWaterToday(user.id).catch(() => null),
     loadWeek(user.id, weekStartOf(date)).catch(() => null),
     loadOnboarding(user.id).catch(() => null),
+    loadFoodDay(user.id, date).catch(() => null),
   ]);
+  const confirmedMeals = food?.logs.filter((l) => l.status === "confirmed").length ?? 0;
+  const ctx = { draft: onboarding?.draft ?? null, plan: week?.plan ?? null };
+  const notes = Object.fromEntries(
+    (["plate", "strength", "walking", "water", "sleep"] as const).map((k) => [k, personalNote(k, ctx)]),
+  );
   const why = week && onboarding ? whyThisPlan(onboarding.draft, week.plan, screenSafety(onboarding.draft), 2) : [];
   const name = profile?.display_name;
   const ready = Boolean(profile?.onboarding_completed_at);
@@ -71,6 +79,7 @@ async function Today() {
           key={`${date}:${day.tasks.length}:${day.tasks[0]?.id ?? ""}`}
           tasks={day.tasks}
           workoutHref={`/plan?d=${weekdayOf(date)}`}
+          notes={notes}
           water={
             water
               ? {
@@ -95,6 +104,25 @@ async function Today() {
             </ButtonLink>
           }
         />
+      ) : null}
+
+      {ready ? (
+        <div className="flex flex-col gap-1.5">
+          <ButtonLink href="/food" variant="secondary">
+            <Salad aria-hidden="true" className="size-4 text-coral" />
+            דווח מה אכלתי
+          </ButtonLink>
+          {confirmedMeals ? (
+            <p className="text-center text-sm text-ink-muted">
+              היום ביומן: <span className="num">{confirmedMeals}</span> {confirmedMeals === 1 ? "ארוחה" : "ארוחות"}
+              {food?.tracking && food.totals.kcal ? (
+                <>
+                  {" "}· הערכה של <span className="num" dir="ltr">{`${food.totals.kcal[0]}–${food.totals.kcal[1]}`}</span> קל׳
+                </>
+              ) : null}
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {ready && day.hasPlan ? <WhyCard lines={why} compact /> : null}

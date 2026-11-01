@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Card } from "@/components/ui/card";
 import { DailyMeter } from "@/components/ui/daily-meter";
+import { InfoButton } from "@/components/knowledge/info-button";
+import type { KnowledgeTopic } from "@/content/knowledge";
 import { getDictionary } from "@/lib/i18n/he";
 import { setTaskOutcome } from "@/lib/plan/actions";
 import type { DayTask, TaskStatus } from "@/lib/plan/data";
@@ -45,6 +47,15 @@ const CHIP: Record<TaskType, string> = {
   habit: "bg-lilac-soft text-lilac",
 };
 
+/** Which knowledge card sits next to a task of each type (follow-up spec §2). */
+const TOPIC: Partial<Record<TaskType, KnowledgeTopic>> = {
+  meal: "plate",
+  workout: "strength",
+  movement: "walking",
+  water: "water",
+  recovery: "sleep",
+};
+
 const isDone = (st: TaskStatus) => st === "done" || st === "partial" || st === "swapped";
 
 function earnedFor(task: DayTask, status: TaskStatus): number {
@@ -60,8 +71,11 @@ export function TodayBoard({
   tasks: initialTasks,
   water,
   workoutHref,
+  notes = {},
 }: {
   tasks: DayTask[];
+  /** Personal lines for the knowledge cards, built on the server from the user's data. */
+  notes?: Partial<Record<KnowledgeTopic, string | null>>;
   water: WaterInit | null;
   /** Where the workout's exercises, demonstrations and times are shown. */
   workoutHref?: string;
@@ -207,6 +221,7 @@ export function TodayBoard({
                         ) : null}
                       </span>
                     </div>
+                    {TOPIC[task.type] ? <InfoButton topic={TOPIC[task.type]!} personal={notes[TOPIC[task.type]!]} /> : null}
                     {!auto ? (
                       <button
                         type="button"
@@ -255,7 +270,10 @@ export function TodayBoard({
       {water ? (
         <Card className="flex flex-col gap-4">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-bold">{w.title}</h2>
+            <h2 className="flex items-center gap-1 text-lg font-bold">
+              {w.title}
+              <InfoButton topic="water" personal={notes.water} />
+            </h2>
             {pace ? <span className="ltr-nums text-sm text-ink-muted">{w.progress(pace.fillsDone, pace.fillsTotal)}</span> : null}
           </div>
 

@@ -133,6 +133,23 @@ check("user cannot read another user's water log", r.rows?.[0].n === 0);
 r = await as(B, "select count(*)::int as n from exercises where slug = 'plank'");
 check("seeded exercises stay hidden until approved", r.rows?.[0].n === 0);
 
+// ── follow-up §7: food log ──
+await as(A, "select 1");
+r = await as(A, `select public.save_food_log('2026-11-01', 'lunch', 'אורז ועוף', 'confirmed', 'web', 'cccccccc-0000-4000-8000-000000000001', true,
+  '[{"item_name":"אורז","quantity":1,"unit":"כוס","kcal_min":180,"kcal_max":240},{"item_name":"חזה עוף","kcal_min":150,"kcal_max":220}]'::jsonb) as id`);
+check("user saves a meal with items in one step", Boolean(r.rows?.[0]?.id));
+const foodId = r.rows?.[0]?.id;
+r = await as(A, `select public.save_food_log('2026-11-01', 'lunch', 'אורז ועוף', 'confirmed', 'web', 'cccccccc-0000-4000-8000-000000000001', true, '[]'::jsonb) as id`);
+check("a retried save with the same client_ref is not stored twice", r.rows?.[0]?.id === foodId);
+r = await as(A, "select count(*)::int as n from food_log_items");
+check("items are saved with the meal", r.rows?.[0].n === 2);
+r = await as(B, "select count(*)::int as n from food_logs");
+check("user cannot read another user's food log", r.rows?.[0].n === 0);
+r = await as(B, `insert into food_log_items (food_log_id, user_id, item_name) values ('${foodId}', '${B}', 'x')`);
+check("user cannot add items to another user's meal", Boolean(r.error));
+r = await as(A, `insert into food_log_items (food_log_id, user_id, item_name, kcal_min, kcal_max) values ('${foodId}', '${A}', 'x', 300, 100)`);
+check("an estimate range cannot be upside down", Boolean(r.error));
+
 // ── phase 3: saving a plan and scoring tasks go through security-definer functions ──
 const tasksJson = JSON.stringify([
   { date: "2026-10-25", type: "workout", title: "אימון", sort_order: 10, points: 25 },
@@ -179,6 +196,37 @@ r = await as(A, `insert into weight_logs (user_id, date, weight_kg) values ('${A
 check("user logs own weight", r.rows?.length === 1);
 r = await as(B, "select count(*)::int as n from weight_logs");
 check("user cannot read another user's weight", r.rows?.[0].n === 0);
+
+// ── follow-up §9: Telegram linking ──
+const HASH = "a".repeat(64);
+r = await as(A, `insert into telegram_link_tokens (user_id, token_hash, expires_at) values ('${A}', '${HASH}', now() + interval '10 minutes') returning 1`);
+check("user creates own link code", r.rows?.length === 1);
+r = await as(B, "select count(*)::int as n from telegram_link_tokens");
+check("user cannot see another user's link codes", r.rows?.[0].n === 0);
+r = await as(A, `select telegram_link_as('${HASH}', 777, 777)`);
+check("a signed-in user cannot link a Telegram account directly", Boolean(r.error));
+r = await as(A, `select save_food_log_as('${A}', '2026-11-01', 'x', false, '[]'::jsonb)`);
+check("a signed-in user cannot use the bot's food save", Boolean(r.error));
+r = await as(B, `select set_task_outcome_as('${A}', '${TASK}', 'done')`);
+check("a signed-in user cannot mark tasks as the bot", Boolean(r.error));
+async function asBot(sql) {
+  await db.exec(`set role authenticated; select set_config('request.jwt.claims', '{"role":"service_role"}', false);`);
+  try { return { rows: (await db.query(sql)).rows }; } catch (e) { return { error: e.message }; } finally { await db.exec("reset role"); }
+}
+r = await asBot(`select telegram_link_as('${HASH}', 777, 777) as u`);
+check("the bot links with a valid code", r.rows?.[0]?.u === A);
+r = await asBot(`select telegram_link_as('${HASH}', 888, 888) as u`);
+check("a link code works only once", r.rows?.[0]?.u === null);
+await db.exec(`insert into telegram_link_tokens (user_id, token_hash, expires_at) values ('${B}', '${"b".repeat(64)}', now() - interval '1 minute')`);
+r = await asBot(`select telegram_link_as('${"b".repeat(64)}', 999, 999) as u`);
+check("an expired link code is refused", r.rows?.[0]?.u === null);
+r = await as(B, "select count(*)::int as n from telegram_links");
+check("user cannot see another user's Telegram link", r.rows?.[0].n === 0);
+r = await as(A, `delete from telegram_links where user_id = '${A}' returning 1`);
+check("user can unlink Telegram", r.rows?.length === 1);
+r = await asBot(`select save_food_log_as('${A}', '2026-11-01', 'טוסט', true, '[{"item_name":"טוסט","kcal_min":250,"kcal_max":350}]'::jsonb) as id`);
+r = await as(A, "select status, source from food_logs where free_text = 'טוסט'");
+check("a meal from the bot is saved as a draft in the same account", r.rows?.[0]?.status === "draft" && r.rows?.[0]?.source === "telegram");
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nAll RLS checks passed");
 process.exit(failed ? 1 : 0);
