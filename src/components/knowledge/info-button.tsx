@@ -1,9 +1,9 @@
 "use client";
 
-import { ExternalLink, Info, X } from "lucide-react";
+import { CircleHelp, ExternalLink, X } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { KNOWLEDGE, type KnowledgeTopic } from "@/content/knowledge";
+import { EVIDENCE_LABEL, KNOWLEDGE, strongestEvidence, type KnowledgeTopic } from "@/content/knowledge";
 
 const SEEN_KEY = "kc-seen";
 
@@ -33,8 +33,9 @@ function markSeen(topic: string) {
 }
 
 /**
- * The small "i" next to a task, target or metric (follow-up spec §2). Opens on tap, not on
- * hover, as a short card: title, 2–4 sentences, "why it matters to you" and the sources.
+ * The small "?" next to a task, target or metric. Opens on tap, not on hover, as a short
+ * card: the evidence level, why it matters, what it means for this user, what is still
+ * uncertain, and the sources with the kind of evidence each one is.
  * A quiet dot marks a card that was not opened yet on this device; nothing moves.
  */
 export function InfoButton({
@@ -76,14 +77,14 @@ export function InfoButton({
         onClick={show}
         aria-haspopup="dialog"
         aria-expanded={open}
-        aria-label={`מידע: ${card.title}`}
+        aria-label={`למה זה חשוב: ${card.title}`}
         className={`relative inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full transition-colors ${
           tone === "dark"
             ? "text-white/60 hover:bg-white/10 hover:text-white"
             : "text-ink-muted hover:bg-field hover:text-ink"
         }`}
       >
-        <Info aria-hidden="true" className="size-4" />
+        <CircleHelp aria-hidden="true" className="size-4" />
         {seen ? null : (
           <span
             aria-hidden="true"
@@ -110,7 +111,7 @@ export function InfoButton({
                       className="flex items-center gap-2 text-lg font-semibold"
                     >
                       <span className="flex size-8 items-center justify-center rounded-full bg-accent-soft text-accent-strong">
-                        <Info aria-hidden="true" className="size-4" />
+                        <CircleHelp aria-hidden="true" className="size-4" />
                       </span>
                       {card.title}
                     </h2>
@@ -123,18 +124,25 @@ export function InfoButton({
                       <X aria-hidden="true" className="size-5" />
                     </button>
                   </div>
+                  <span className="self-start rounded-full bg-field px-2.5 py-0.5 text-xs text-ink-muted">
+                    מבוסס על: {EVIDENCE_LABEL[strongestEvidence(card)]}
+                  </span>
                   <p className="text-sm leading-relaxed">{card.body}</p>
                   <div className="rounded-xl bg-accent-soft px-4 py-3">
                     <p className="text-xs font-semibold text-accent-strong">
-                      למה זה חשוב לך
+                      מה זה אומר לך
                     </p>
                     <p className="text-sm leading-relaxed">
                       {personal ?? card.general}
                     </p>
                   </div>
+                  <p className="text-sm leading-relaxed text-ink-muted">
+                    <span className="font-semibold">מה עדיין לא ודאי: </span>
+                    {card.uncertain}
+                  </p>
                   <div className="flex flex-col gap-1.5">
                     <p className="text-xs font-semibold text-ink-muted">
-                      קרא עוד במקורות
+                      המקורות
                     </p>
                     <ul className="flex flex-col gap-1">
                       {card.sources.map((src) => (
@@ -149,11 +157,10 @@ export function InfoButton({
                               aria-hidden="true"
                               className="mt-0.5 size-3.5 shrink-0 text-ink-muted"
                             />
-                            <span>
-                              <span dir="ltr">{src.title}</span>
-                              <span className="text-ink-muted">
-                                {" "}
-                                · {src.publisher}
+                            <span className="flex flex-col">
+                              <span dir="ltr" className="text-right">{src.title}</span>
+                              <span className="text-xs text-ink-muted">
+                                {EVIDENCE_LABEL[src.kind]} · <bdi>{src.publisher}</bdi>
                               </span>
                             </span>
                           </a>
