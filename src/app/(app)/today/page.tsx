@@ -14,6 +14,7 @@ import { loadOnboarding } from "@/lib/onboarding/data";
 import { loadDayTasks, loadWeek } from "@/lib/plan/data";
 import { weekdayOf, weekStartOf } from "@/lib/plan/week";
 import { whyThisPlan } from "@/lib/plan/why";
+import { personalNote } from "@/lib/knowledge/personal";
 import { screenSafety } from "@/lib/safety/screen";
 import { loadWaterToday } from "@/lib/water/data";
 import { localDay } from "@/lib/water/time";
@@ -43,6 +44,10 @@ async function Today() {
     loadWeek(user.id, weekStartOf(date)).catch(() => null),
     loadOnboarding(user.id).catch(() => null),
   ]);
+  const ctx = { draft: onboarding?.draft ?? null, plan: week?.plan ?? null };
+  const notes = Object.fromEntries(
+    (["plate", "strength", "walking", "water", "sleep"] as const).map((k) => [k, personalNote(k, ctx)]),
+  );
   const why = week && onboarding ? whyThisPlan(onboarding.draft, week.plan, screenSafety(onboarding.draft), 2) : [];
   const name = profile?.display_name;
   const ready = Boolean(profile?.onboarding_completed_at);
@@ -71,6 +76,7 @@ async function Today() {
           key={`${date}:${day.tasks.length}:${day.tasks[0]?.id ?? ""}`}
           tasks={day.tasks}
           workoutHref={`/plan?d=${weekdayOf(date)}`}
+          notes={notes}
           water={
             water
               ? {

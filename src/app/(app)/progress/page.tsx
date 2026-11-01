@@ -6,8 +6,11 @@ import { PageHeader } from "@/components/ui/page-header";
 import { LoadingState } from "@/components/ui/states";
 import { requireUser } from "@/lib/data/user";
 import { getDictionary } from "@/lib/i18n/he";
-import { loadProgress } from "@/lib/progress/data";
-import { activeDays } from "@/lib/progress/trend";
+import Link from "next/link";
+import { WeekScoreChart } from "@/components/progress/week-score-chart";
+import { addDays, weekStartOf } from "@/lib/plan/week";
+import { loadProgress, loadWeekScores } from "@/lib/progress/data";
+import { compareWeeks, summarizeWeek } from "@/lib/progress/trend";
 import { localDay } from "@/lib/water/time";
 
 const t = getDictionary();
@@ -15,47 +18,60 @@ const s = t.screens.progress;
 
 export const metadata: Metadata = { title: s.title };
 
-export default function ProgressPage() {
+export default function ProgressPage({ searchParams }: PageProps<"/progress">) {
   return (
     <Suspense fallback={<LoadingState label={t.common.loading} />}>
-      <Progress />
+      <Progress searchParams={searchParams} />
     </Suspense>
   );
 }
 
-const dayName = new Intl.DateTimeFormat("he-IL", { weekday: "narrow", timeZone: "UTC" });
-
-async function Progress() {
+async function Progress({ searchParams }: { searchParams: PageProps<"/progress">["searchParams"] }) {
   const user = await requireUser();
   const today = localDay(new Date()).date;
-  const p = await loadProgress(user.id, today);
-  const thisWeek = p.days.slice(7);
+  const sp = await searchParams;
+  const lastWeek = sp.w === "prev";
+  const weekStart = addDays(weekStartOf(today), lastWeek ? -7 : 0);
+  const [p, week] = await Promise.all([loadProgress(user.id, today), loadWeekScores(user.id, weekStart)]);
+  const summary = summarizeWeek(week.days, today);
+  const comparison = compareWeeks(summary, summarizeWeek(week.previous, today));
 
   return (
     <>
       <PageHeader title={s.title} />
 
       <Card className="flex flex-col gap-4">
-        <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-lg font-semibold">{s.consistencyTitle}</h2>
-          <span className="text-sm text-ink-muted">{s.activeDays(activeDays(thisWeek))}</span>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">{lastWeek ? "השבוע שעבר" : "השבוע שלך"}</h2>
+          <nav aria-label="בחירת שבוע" className="flex gap-1 rounded-lg bg-field p-1 text-sm">
+            <Link href="/progress?w=prev" scroll={false} aria-current={lastWeek ? "page" : undefined} className={`rounded-md px-3 py-1 ${lastWeek ? "bg-surface font-medium shadow-sm" : "text-ink-muted"}`}>
+              קודם
+            </Link>
+            <Link href="/progress" scroll={false} aria-current={lastWeek ? undefined : "page"} className={`rounded-md px-3 py-1 ${lastWeek ? "text-ink-muted" : "bg-surface font-medium shadow-sm"}`}>
+              נוכחי
+            </Link>
+          </nav>
         </div>
-        <ol className="grid items-end gap-1" style={{ gridTemplateColumns: "repeat(14, minmax(0, 1fr))" }}>
-          {p.days.map((d) => {
-            const ratio = d.possible ? d.earned / d.possible : 0;
-            return (
-              <li key={d.date} className="flex flex-col items-center gap-1" title={`${d.earned}/${d.possible}`}>
-                <div className="flex h-20 w-full items-end overflow-hidden rounded-md bg-field">
-                  <div className="w-full rounded-md bg-brand transition-[height]" style={{ height: `${Math.round(ratio * 100)}%` }} />
-                </div>
-                <span className={`text-[10px] ${d.date === today ? "font-bold text-ink" : "text-ink-muted"}`}>
-                  {dayName.format(new Date(`${d.date}T00:00:00Z`))}
-                </span>
-              </li>
-            );
-          })}
-        </ol>
-        <p className="text-sm text-ink-muted">{s.consistencyNote}</p>
+        <dl className="grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-xl bg-field p-3">
+            <dt className="text-xs text-ink-muted">סך נקודות</dt>
+            <dd className="num text-lg font-semibold">{summary.total}</dd>
+          </div>
+          <div className="rounded-xl bg-field p-3">
+            <dt className="text-xs text-ink-muted">ממוצע ליום</dt>
+            <dd className="num text-lg font-semibold">{summary.average}</dd>
+          </div>
+          <div className="rounded-xl bg-field p-3">
+            <dt className="text-xs text-ink-muted">ימים פעילים</dt>
+            <dd className="num text-lg font-semibold">{summary.activeDays}</dd>
+          </div>
+        </dl>
+        {summary.streak >= 2 && !lastWeek ? (
+          <p className="text-sm font-medium">רצף של <span className="num">{summary.streak}</span> ימים עם לפחות משימה אחת. 🔥</p>
+        ) : null}
+        {comparison && !lastWeek ? <p className="text-sm text-accent-strong">{comparison}</p> : null}
+        <WeekScoreChart key={weekStart} days={week.days} today={today} />
+        <p className="text-sm text-ink-muted">{s.consistencyNote} לחיצה על יום מציגה מה בוצע בו.</p>
       </Card>
 
       <Card className="flex items-center justify-between gap-3">

@@ -44,3 +44,48 @@ export interface DayScore {
 export function activeDays(days: DayScore[]): number {
   return days.filter((d) => d.possible > 0 && d.earned * 2 >= d.possible).length;
 }
+
+export interface WeekSummary {
+  total: number;
+  possible: number;
+  /** Average points per day, over the days so far that had tasks. */
+  average: number;
+  activeDays: number;
+  /** Days in a row, up to today, with at least one completed task. */
+  streak: number;
+  /** Days so far that had tasks. */
+  countedDays: number;
+}
+
+/** Weekly summary (follow-up spec §8). Future days are not counted, so the week is never "behind". */
+export function summarizeWeek(days: { date: string; earned: number; possible: number }[], today: string): WeekSummary {
+  const sofar = days.filter((d) => d.date <= today && d.possible > 0);
+  const total = sofar.reduce((s, d) => s + d.earned, 0);
+  let streak = 0;
+  for (const d of [...days].filter((x) => x.date <= today).reverse()) {
+    if (d.earned > 0) streak += 1;
+    else if (d.date === today) continue; // today may still be in progress
+    else break;
+  }
+  return {
+    total,
+    possible: sofar.reduce((s, d) => s + d.possible, 0),
+    average: sofar.length ? Math.round(total / sofar.length) : 0,
+    activeDays: activeDays(sofar.map((d) => ({ ...d, done: 0, total: 0 }))),
+    streak,
+    countedDays: sofar.length,
+  };
+}
+
+/**
+ * A positive comparison with the week before, or null. Shown only with enough data on both
+ * sides (at least 3 days each), and never as a drop: a weaker week gets no comparison line.
+ */
+export function compareWeeks(current: WeekSummary, previous: WeekSummary): string | null {
+  if (current.countedDays < 3 || previous.countedDays < 3) return null;
+  const diff = current.average - previous.average;
+  if (diff >= 3) return `בממוצע ${diff} נקודות יותר ביום מהשבוע שעבר. יפה!`;
+  if (current.activeDays > previous.activeDays) return `${current.activeDays - previous.activeDays} ימים פעילים יותר מהשבוע שעבר.`;
+  if (Math.abs(diff) < 3) return "שבוע יציב, בקצב דומה לשבוע שעבר.";
+  return null;
+}
