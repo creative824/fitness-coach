@@ -9,6 +9,7 @@ import { signOut } from "@/lib/auth/actions";
 import { getProfileSummary } from "@/lib/data/profile";
 import { requireUser } from "@/lib/data/user";
 import { CalorieToggle } from "@/components/food/calorie-toggle";
+import { TelegramCard } from "@/components/telegram/telegram-card";
 import { createClient } from "@/lib/supabase/server";
 import { getDictionary } from "@/lib/i18n/he";
 
@@ -32,9 +33,10 @@ export default function ProfilePage() {
 async function ProfileContent() {
   const user = await requireUser();
   const supabase = await createClient();
-  const [profile, { data: prefs, error: prefsError }] = await Promise.all([
+  const [profile, { data: prefs, error: prefsError }, { data: tgLink, error: tgError }] = await Promise.all([
     getProfileSummary(user.id),
     supabase.from("profiles").select("calorie_tracking").eq("user_id", user.id).maybeSingle(),
+    supabase.from("telegram_links").select("linked_at").eq("user_id", user.id).maybeSingle(),
   ]);
   return (
     <>
@@ -61,6 +63,11 @@ async function ProfileContent() {
       {prefsError ? null : (
         <Card>
           <CalorieToggle on={(prefs as { calorie_tracking?: boolean } | null)?.calorie_tracking !== false} />
+        </Card>
+      )}
+      {tgError ? null : (
+        <Card>
+          <TelegramCard linked={Boolean(tgLink)} linkedAt={(tgLink as { linked_at?: string } | null)?.linked_at ?? null} />
         </Card>
       )}
       <Card className="flex flex-col gap-3">
