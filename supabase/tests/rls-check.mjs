@@ -87,7 +87,7 @@ check("user cannot read another user's plan", r.rows?.[0].n === 0);
 r = await as(A, "select count(*)::int as n from plans");
 check("user reads own plan", r.rows?.[0].n === 1);
 
-r = await as(A, `insert into plans (user_id, week_start, plan_json) values ('${A}', '2026-11-08', '{}')`);
+r = await as(A, `insert into plans (user_id, week_start, plan_json) values ('${A}', '2026-10-25', '{}')`);
 check("plans are written by the server only", Boolean(r.error));
 
 r = await as(A, "update task_completions set points_awarded = 999 returning 1");
@@ -132,6 +132,53 @@ check("user cannot read another user's water log", r.rows?.[0].n === 0);
 
 r = await as(B, "select count(*)::int as n from exercises where slug = 'plank'");
 check("seeded exercises stay hidden until approved", r.rows?.[0].n === 0);
+
+// ── phase 3: saving a plan and scoring tasks go through security-definer functions ──
+const tasksJson = JSON.stringify([
+  { date: "2026-10-25", type: "workout", title: "אימון", sort_order: 10, points: 25 },
+  { date: "2026-10-25", type: "water", title: "מים", sort_order: 20 },
+]);
+r = await as(A, `select save_week_plan('2026-10-25', '{"schema_version":1}', '${tasksJson}') as id`);
+check("user saves own plan through save_week_plan", Boolean(r.rows?.[0].id));
+r = await as(A, "select type, points from daily_tasks where date = '2026-10-25' order by sort_order");
+check("task points are set by the database, not the client", r.rows?.[0].points === 20 && r.rows?.[1].points === 5);
+
+r = await as(A, "select id from daily_tasks where date = '2026-10-25' and type = 'workout'");
+const W = r.rows?.[0].id;
+r = await as(A, `select set_task_outcome('${W}', 'done')`);
+r = await as(A, `select set_task_outcome('${W}', 'done')`);
+r = await as(A, `select count(*)::int as n, sum(points_awarded)::int as p from task_completions where task_id = '${W}'`);
+check("marking a task twice scores it once", r.rows?.[0].n === 1 && r.rows?.[0].p === 20);
+r = await as(A, `select set_task_outcome('${W}', 'partial')`);
+r = await as(A, `select points_awarded from task_completions where task_id = '${W}'`);
+check("partial counts half", r.rows?.[0].points_awarded === 10);
+
+r = await as(B, `select set_task_outcome('${W}', 'done')`);
+check("user cannot mark another user's task", Boolean(r.error));
+
+r = await as(A, `select save_week_plan('2026-10-25', '{"schema_version":1}', '${tasksJson}') as id`);
+r = await as(A, "select count(*)::int as n, count(*) filter (where status = 'active')::int as a from plans where week_start = '2026-10-25'");
+check("regenerating keeps one active version", r.rows?.[0].n === 2 && r.rows?.[0].a === 1);
+r = await as(A, `select count(*)::int as n from daily_tasks d join plans p on p.id = d.plan_id
+  where p.status = 'active' and p.week_start = '2026-10-25'`);
+check("regenerating keeps completed tasks without duplicates", r.rows?.[0].n === 2);
+r = await as(A, `select sum(points_awarded)::int as p from task_completions c join daily_tasks d on d.id = c.task_id where d.date = '2026-10-25'`);
+check("regenerating does not double points", r.rows?.[0].p === 10);
+
+r = await as(A, `select save_week_plan('2026-11-09', '{}', '[]')`);
+check("plan weeks start on Sunday", Boolean(r.error));
+r = await as(A, `select save_week_plan('2026-11-15', '{}', '[{"date":"2026-11-30","type":"water","title":"x"}]')`);
+check("tasks must fall inside the plan week", Boolean(r.error));
+
+r = await as(A, `select save_week_plan('2099-01-04', '{}', '[{"date":"2099-01-04","type":"water","title":"x"}]')`);
+r = await as(A, "select id from daily_tasks where date = '2099-01-04'");
+r = await as(A, `select set_task_outcome('${r.rows?.[0].id}', 'done')`);
+check("future tasks cannot be marked", Boolean(r.error));
+
+r = await as(A, `insert into weight_logs (user_id, date, weight_kg) values ('${A}', '2026-11-01', 74.5) returning 1`);
+check("user logs own weight", r.rows?.length === 1);
+r = await as(B, "select count(*)::int as n from weight_logs");
+check("user cannot read another user's weight", r.rows?.[0].n === 0);
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nAll RLS checks passed");
 process.exit(failed ? 1 : 0);

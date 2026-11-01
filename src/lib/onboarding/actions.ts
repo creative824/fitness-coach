@@ -2,7 +2,10 @@
 
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/data/user";
+import { generateWeekPlan } from "@/lib/plan/data";
+import { weekStartOf } from "@/lib/plan/week";
 import { createClient } from "@/lib/supabase/server";
+import { localDay } from "@/lib/water/time";
 import { draftToRows } from "./mapping";
 import { draftSchema, firstIncompleteStep, STEP_ORDER, type OnboardingDraft } from "./schema";
 
@@ -46,5 +49,9 @@ export async function completeOnboarding(draft: OnboardingDraft): Promise<SaveRe
   if (firstIncompleteStep(draft) !== null) return { ok: false, error: "incomplete" };
   const r = await persist(draft, STEP_ORDER.length, true);
   if (!r.ok) return r;
+  // Create this week's plan right away. If it cannot be made yet (e.g. the libraries are not
+  // approved), the today screen offers a button instead.
+  const user = await requireUser();
+  await generateWeekPlan(user.id, weekStartOf(localDay(new Date()).date)).catch(() => null);
   redirect("/today");
 }
