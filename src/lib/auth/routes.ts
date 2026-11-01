@@ -1,5 +1,5 @@
 /** Route access rules, shared by the proxy and tests. */
-export const PROTECTED_PREFIXES = ["/today", "/plan", "/coach", "/progress", "/profile", "/onboarding", "/admin"] as const;
+export const PROTECTED_PREFIXES = ["/today", "/plan", "/coach", "/progress", "/food", "/profile", "/onboarding", "/admin"] as const;
 export const GUEST_ONLY = ["/login", "/signup", "/forgot-password"] as const;
 
 const matches = (path: string, prefix: string) => path === prefix || path.startsWith(`${prefix}/`);

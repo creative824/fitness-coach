@@ -3,6 +3,7 @@
 import { Check, Dumbbell, Footprints, Droplets, Moon, Salad, Sparkles } from "lucide-react";
 import { useState } from "react";
 import type { WeekDay } from "@/lib/progress/data";
+import type { FoodDaySummary } from "@/lib/food/data";
 
 const ICON: Record<string, typeof Salad> = { meal: Salad, workout: Dumbbell, movement: Footprints, water: Droplets, recovery: Moon, habit: Sparkles };
 const dayShort = new Intl.DateTimeFormat("he-IL", { weekday: "short", timeZone: "UTC" });
@@ -15,13 +16,24 @@ const STATUS: Record<string, string> = { done: "בוצע", partial: "חלקית"
  * out of what was possible that day; tapping a day opens what was done. A weak day is shown as
  * it is, with no red and no "failed".
  */
-export function WeekScoreChart({ days, today }: { days: WeekDay[]; today: string }) {
+export function WeekScoreChart({
+  days,
+  today,
+  food = {},
+  foodTracking = true,
+}: {
+  days: WeekDay[];
+  today: string;
+  food?: Record<string, FoodDaySummary>;
+  foodTracking?: boolean;
+}) {
   const initial = days.findIndex((d) => d.date === today);
   const [selected, setSelected] = useState(initial >= 0 ? initial : 0);
   const max = Math.max(1, ...days.map((d) => d.possible));
   const day = days[selected];
   const done = day.tasks.filter((t) => t.earned > 0);
   const open = day.tasks.filter((t) => t.earned === 0);
+  const meals = food[day.date];
 
   return (
     <div className="flex flex-col gap-4">
@@ -88,6 +100,17 @@ export function WeekScoreChart({ days, today }: { days: WeekDay[]; today: string
             {open.length && done.length ? <p className="text-xs text-ink-muted">ועוד {open.length} משימות שלא סומנו.</p> : null}
           </>
         )}
+        {meals ? (
+          <p className="flex flex-wrap items-center gap-1.5 border-t border-line pt-2 text-sm">
+            <Salad aria-hidden="true" className="size-4 text-coral" />
+            יומן אוכל: <span className="num">{meals.meals}</span> {meals.meals === 1 ? "ארוחה" : "ארוחות"}
+            {foodTracking && meals.totals.kcal ? (
+              <span className="text-ink-muted">
+                · הערכה של <span className="num" dir="ltr">{`${meals.totals.kcal[0]}–${meals.totals.kcal[1]}`}</span> קל׳
+              </span>
+            ) : null}
+          </p>
+        ) : null}
       </section>
     </div>
   );

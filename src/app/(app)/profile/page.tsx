@@ -8,6 +8,8 @@ import { LoadingState } from "@/components/ui/states";
 import { signOut } from "@/lib/auth/actions";
 import { getProfileSummary } from "@/lib/data/profile";
 import { requireUser } from "@/lib/data/user";
+import { CalorieToggle } from "@/components/food/calorie-toggle";
+import { createClient } from "@/lib/supabase/server";
 import { getDictionary } from "@/lib/i18n/he";
 
 const t = getDictionary();
@@ -29,7 +31,11 @@ export default function ProfilePage() {
 
 async function ProfileContent() {
   const user = await requireUser();
-  const profile = await getProfileSummary(user.id);
+  const supabase = await createClient();
+  const [profile, { data: prefs, error: prefsError }] = await Promise.all([
+    getProfileSummary(user.id),
+    supabase.from("profiles").select("calorie_tracking").eq("user_id", user.id).maybeSingle(),
+  ]);
   return (
     <>
       <Card tone="night" className="relative flex flex-col gap-5 overflow-hidden p-6">
@@ -52,6 +58,11 @@ async function ProfileContent() {
           {s.editProfile}
         </ButtonLink>
       </Card>
+      {prefsError ? null : (
+        <Card>
+          <CalorieToggle on={(prefs as { calorie_tracking?: boolean } | null)?.calorie_tracking !== false} />
+        </Card>
+      )}
       <Card className="flex flex-col gap-3">
         <h2 className="font-semibold">{s.account}</h2>
         <span dir="ltr" className="rounded-xl bg-field px-4 py-3 text-end text-ink-muted">

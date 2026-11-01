@@ -133,6 +133,23 @@ check("user cannot read another user's water log", r.rows?.[0].n === 0);
 r = await as(B, "select count(*)::int as n from exercises where slug = 'plank'");
 check("seeded exercises stay hidden until approved", r.rows?.[0].n === 0);
 
+// ── follow-up §7: food log ──
+await as(A, "select 1");
+r = await as(A, `select public.save_food_log('2026-11-01', 'lunch', 'אורז ועוף', 'confirmed', 'web', 'cccccccc-0000-4000-8000-000000000001', true,
+  '[{"item_name":"אורז","quantity":1,"unit":"כוס","kcal_min":180,"kcal_max":240},{"item_name":"חזה עוף","kcal_min":150,"kcal_max":220}]'::jsonb) as id`);
+check("user saves a meal with items in one step", Boolean(r.rows?.[0]?.id));
+const foodId = r.rows?.[0]?.id;
+r = await as(A, `select public.save_food_log('2026-11-01', 'lunch', 'אורז ועוף', 'confirmed', 'web', 'cccccccc-0000-4000-8000-000000000001', true, '[]'::jsonb) as id`);
+check("a retried save with the same client_ref is not stored twice", r.rows?.[0]?.id === foodId);
+r = await as(A, "select count(*)::int as n from food_log_items");
+check("items are saved with the meal", r.rows?.[0].n === 2);
+r = await as(B, "select count(*)::int as n from food_logs");
+check("user cannot read another user's food log", r.rows?.[0].n === 0);
+r = await as(B, `insert into food_log_items (food_log_id, user_id, item_name) values ('${foodId}', '${B}', 'x')`);
+check("user cannot add items to another user's meal", Boolean(r.error));
+r = await as(A, `insert into food_log_items (food_log_id, user_id, item_name, kcal_min, kcal_max) values ('${foodId}', '${A}', 'x', 300, 100)`);
+check("an estimate range cannot be upside down", Boolean(r.error));
+
 // ── phase 3: saving a plan and scoring tasks go through security-definer functions ──
 const tasksJson = JSON.stringify([
   { date: "2026-10-25", type: "workout", title: "אימון", sort_order: 10, points: 25 },

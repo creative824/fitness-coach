@@ -10,6 +10,7 @@ import Link from "next/link";
 import { WeekScoreChart } from "@/components/progress/week-score-chart";
 import { addDays, weekStartOf } from "@/lib/plan/week";
 import { loadProgress, loadWeekScores } from "@/lib/progress/data";
+import { loadFoodRange } from "@/lib/food/data";
 import { compareWeeks, summarizeWeek } from "@/lib/progress/trend";
 import { localDay } from "@/lib/water/time";
 
@@ -32,7 +33,11 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
   const sp = await searchParams;
   const lastWeek = sp.w === "prev";
   const weekStart = addDays(weekStartOf(today), lastWeek ? -7 : 0);
-  const [p, week] = await Promise.all([loadProgress(user.id, today), loadWeekScores(user.id, weekStart)]);
+  const [p, week, food] = await Promise.all([
+    loadProgress(user.id, today),
+    loadWeekScores(user.id, weekStart),
+    loadFoodRange(user.id, weekStart, addDays(weekStart, 6)).catch(() => ({ tracking: true, days: {} })),
+  ]);
   const summary = summarizeWeek(week.days, today);
   const comparison = compareWeeks(summary, summarizeWeek(week.previous, today));
 
@@ -70,7 +75,7 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
           <p className="text-sm font-medium">רצף של <span className="num">{summary.streak}</span> ימים עם לפחות משימה אחת. 🔥</p>
         ) : null}
         {comparison && !lastWeek ? <p className="text-sm text-accent-strong">{comparison}</p> : null}
-        <WeekScoreChart key={weekStart} days={week.days} today={today} />
+        <WeekScoreChart key={weekStart} days={week.days} today={today} food={food.days} foodTracking={food.tracking} />
         <p className="text-sm text-ink-muted">{s.consistencyNote} לחיצה על יום מציגה מה בוצע בו.</p>
       </Card>
 
