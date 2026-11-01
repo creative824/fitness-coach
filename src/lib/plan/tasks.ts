@@ -51,7 +51,9 @@ export function planToTasks(plan: WeeklyPlan, mealTitles: Map<string, string>): 
       });
     });
     if (day.workout) {
-      tasks.push({ date: day.date, type: "workout", title: day.workout.title, ref: { day: dayIndex }, sort_order: 10 });
+      // The real total time is part of the title, so "My day" shows it up front (follow-up spec §4).
+      const title = `${day.workout.title} · ${day.workout.estimated_minutes} דק׳`;
+      tasks.push({ date: day.date, type: "workout", title, ref: { day: dayIndex }, sort_order: 10 });
     }
     day.habits.forEach((h, i) => {
       tasks.push({

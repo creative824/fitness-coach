@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Droplet, Droplets, Dumbbell, Footprints, Moon, MoreHorizontal, Salad, Sparkles, Undo2 } from "lucide-react";
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Card } from "@/components/ui/card";
 import { DailyMeter } from "@/components/ui/daily-meter";
@@ -55,7 +56,16 @@ function earnedFor(task: DayTask, status: TaskStatus): number {
  * component, so a tap updates everything on the same frame. The server is told in the
  * background; if a write fails the tap is rolled back and a short note is shown.
  */
-export function TodayBoard({ tasks: initialTasks, water }: { tasks: DayTask[]; water: WaterInit | null }) {
+export function TodayBoard({
+  tasks: initialTasks,
+  water,
+  workoutHref,
+}: {
+  tasks: DayTask[];
+  water: WaterInit | null;
+  /** Where the workout's exercises, demonstrations and times are shown. */
+  workoutHref?: string;
+}) {
   const [statuses, setStatuses] = useState<Record<string, TaskStatus>>(() =>
     Object.fromEntries(initialTasks.map((x) => [x.id, x.status])),
   );
@@ -187,6 +197,14 @@ export function TodayBoard({ tasks: initialTasks, water }: { tasks: DayTask[]; w
                       </span>
                       <span className="text-xs text-ink-muted">
                         {auto ? s.waterAuto : st === "pending" ? `${task.points} ${s.points}` : s.status[st]}
+                        {task.type === "workout" && workoutHref ? (
+                          <>
+                            {" · "}
+                            <Link href={workoutHref} className="font-medium text-ink underline underline-offset-2">
+                              תרגילים והדגמות
+                            </Link>
+                          </>
+                        ) : null}
                       </span>
                     </div>
                     {!auto ? (

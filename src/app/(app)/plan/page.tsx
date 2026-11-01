@@ -1,15 +1,20 @@
 import type { Metadata } from "next";
-import { CalendarDays, Clock, Dumbbell, Footprints, Droplets, Moon, Salad, Sparkles } from "lucide-react";
+import { CalendarDays, Footprints, Droplets, Moon, Salad, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { CreatePlanButton } from "@/components/plan/create-plan-button";
+import { WhyCard } from "@/components/plan/why-card";
+import { WorkoutCard } from "@/components/plan/workout-card";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState, LoadingState } from "@/components/ui/states";
 import { getProfileSummary } from "@/lib/data/profile";
 import { requireUser } from "@/lib/data/user";
 import { getDictionary } from "@/lib/i18n/he";
+import { loadOnboarding } from "@/lib/onboarding/data";
 import { loadWeek } from "@/lib/plan/data";
+import { whyThisPlan } from "@/lib/plan/why";
+import { screenSafety } from "@/lib/safety/screen";
 import { SLOT_HE } from "@/lib/plan/tasks";
 import { weekdayOf, weekStartOf } from "@/lib/plan/week";
 import { localDay } from "@/lib/water/time";
@@ -36,7 +41,12 @@ async function Plan({ searchParams }: { searchParams: PageProps<"/plan">["search
   const user = await requireUser();
   const today = localDay(new Date()).date;
   const weekStart = weekStartOf(today);
-  const [profile, week, sp] = await Promise.all([getProfileSummary(user.id), loadWeek(user.id, weekStart), searchParams]);
+  const [profile, week, sp, onboarding] = await Promise.all([
+    getProfileSummary(user.id),
+    loadWeek(user.id, weekStart),
+    searchParams,
+    loadOnboarding(user.id),
+  ]);
 
   if (!week) {
     const ready = Boolean(profile?.onboarding_completed_at);
@@ -58,6 +68,11 @@ async function Plan({ searchParams }: { searchParams: PageProps<"/plan">["search
   const selected = Number.isInteger(raw) && raw >= 0 && raw <= 6 ? raw : weekdayOf(today);
   const day = plan.days[selected];
   const at = (d: string) => new Date(`${d}T00:00:00Z`);
+  const draft = onboarding.draft;
+  const why = whyThisPlan(draft, plan, screenSafety(draft));
+  // Plans saved before the time fix may run over the minutes the user has (follow-up spec §4).
+  const budget = draft.session_minutes;
+  const stale = plan.days.some((d) => d.workout && (d.workout.budget_minutes === undefined || (budget && d.workout.estimated_minutes > budget)));
 
   return (
     <>
@@ -90,35 +105,24 @@ async function Plan({ searchParams }: { searchParams: PageProps<"/plan">["search
         {day.date === today ? <span className="ms-2 text-sm font-normal text-ink-muted">{s.today}</span> : null}
       </h2>
 
-      {day.workout ? (
-        <Card className="flex flex-col gap-4">
-          <div className="flex items-start gap-3">
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-sky-soft text-sky">
-              <Dumbbell aria-hidden="true" className="size-5" />
-            </span>
-            <div className="flex flex-1 flex-col gap-0.5">
-              <h3 className="font-semibold">{day.workout.title}</h3>
-              <p className="text-sm text-ink-muted">{day.workout.why}</p>
-            </div>
-            <span className="inline-flex items-center gap-1 text-sm text-ink-muted">
-              <Clock aria-hidden="true" className="size-4" />
-              <span className="num">{day.workout.estimated_minutes}</span> {s.minutes}
-            </span>
-          </div>
-          <ol className="flex flex-col divide-y divide-line rounded-xl ring-1 ring-line">
-            {day.workout.blocks.map((b, i) => {
-              const ex = week.exercises.get(b.exercise_id);
-              return (
-                <li key={`${b.exercise_id}-${i}`} className="flex items-center justify-between gap-3 px-4 py-3">
-                  <span className="font-medium">{ex?.name_he ?? s.unavailable}</span>
-                  <span className="num shrink-0 text-sm text-ink-muted" dir="rtl">
-                    {b.sets} × {b.reps !== undefined ? `${b.reps} ${s.reps}` : `${b.seconds} ${s.seconds}`} · {s.rest} {b.rest_seconds} {s.seconds}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
+      {stale ? (
+        <Card className="flex flex-col gap-3 bg-warning-soft">
+          <p className="text-sm text-warning">
+            עדכנו את חישוב זמן האימון כך שיכלול חימום ומנוחות ולא יעבור את הזמן שבחרת. כדאי ליצור את התוכנית מחדש כדי לקבל אימונים באורך הנכון. משימות שכבר סימנת נשמרות.
+          </p>
+          <CreatePlanButton again />
         </Card>
+      ) : null}
+
+      {day.workout ? (
+        <WorkoutCard
+          key={`${selected}-${sp.full ? "full" : "short"}`}
+          workout={day.workout}
+          exercises={week.exercises}
+          date={day.date}
+          dayIndex={selected}
+          showFull={sp.full === "1"}
+        />
       ) : (
         <Card className="flex items-center gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-lilac-soft text-lilac">
@@ -170,6 +174,8 @@ async function Plan({ searchParams }: { searchParams: PageProps<"/plan">["search
           })}
         </ul>
       </Card>
+
+      <WhyCard lines={why} />
 
       <Card className="flex flex-col gap-3">
         <h3 className="font-semibold">{s.whyTitle}</h3>

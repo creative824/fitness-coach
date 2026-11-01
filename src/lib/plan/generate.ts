@@ -10,6 +10,7 @@ import type { SafetyResult } from "@/lib/safety/screen";
 import type { ExerciseCandidate, MealCandidate } from "./candidates";
 import { maxDifficulty } from "./candidates";
 import type { PlanDay, WeeklyPlan } from "./schema";
+import { fitBlocks, toMinutes, totalSeconds, warmupSeconds } from "./duration";
 import type { Targets } from "./targets";
 import { weekDates } from "./week";
 
@@ -116,16 +117,29 @@ function buildWorkout(index: number, input: ComposeInput): PlanDay["workout"] {
   }
   if (!blocks.length) return null;
 
-  const workSeconds = blocks.reduce((sum, b) => sum + b.sets * ((b.seconds ?? (b.reps ?? 10) * 4) + b.rest_seconds), 0);
+  // The user's time is a hard limit (follow-up spec §4). The full workout is trimmed to fit;
+  // the full one is kept aside and shown only if the user asks for it.
+  const budget = input.sessionMinutes ?? 30;
+  const slugOf = (id: string) => input.exercises.find((e) => e.id === id)?.slug;
+  const fitted = fitBlocks(blocks, budget, slugOf);
+  if (!fitted) return null;
+  const warmup = warmupSeconds(budget);
+  const minutes = toMinutes(totalSeconds(fitted, warmup, slugOf));
+  const fullMinutes = toMinutes(totalSeconds(blocks, warmupSeconds(Math.max(budget, 31)), slugOf));
+  const keptPatterns = trained.slice(0, fitted.length);
+
   const location = input.location.includes("gym") ? "gym" : input.location.includes("home") || !input.location.length ? "home" : "outdoors";
-  const names = [...new Set(trained)].map((p) => PATTERN_HE[p]);
+  const names = [...new Set(keptPatterns)].map((p) => PATTERN_HE[p]);
   return {
     title: `אימון כל הגוף ${LETTERS[index] ?? index + 1}`,
     location,
-    estimated_minutes: Math.min(120, Math.max(5, Math.round(workSeconds / 60) + 5)),
+    estimated_minutes: minutes,
     difficulty: level,
-    blocks,
+    blocks: fitted,
     why: `מאמן ${names.join(", ")}.${low ? " בעצימות נמוכה, לפי מה שסימנת בשאלון." : ""}`.slice(0, 280),
+    warmup_minutes: toMinutes(warmup),
+    budget_minutes: budget,
+    ...(fullMinutes > budget ? { full: { estimated_minutes: Math.min(120, fullMinutes), blocks } } : {}),
   };
 }
 

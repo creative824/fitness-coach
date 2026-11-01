@@ -4,6 +4,7 @@ import { MEAL_IDEAS } from "@/content/meal-ideas";
 import { screenSafety } from "@/lib/safety/screen";
 import { blockedTags, filterExercises, filterMeals, type ExerciseCandidate, type MealCandidate } from "./candidates";
 import { composeWeek, mealSlots, pickWorkoutDays, type ComposeInput } from "./generate";
+import { fitBlocks, REP_SECONDS, toMinutes, totalSeconds, warmupSeconds } from "./duration";
 import { planToTasks, pointsFor } from "./tasks";
 import { caloriesRange, computeTargets, type TargetInput } from "./targets";
 import { validatePlan } from "./validate";
@@ -159,6 +160,54 @@ describe("composeWeek", () => {
   it("maps meals per day to slots", () => {
     expect(mealSlots(2)).toEqual(["breakfast", "dinner"]);
     expect(mealSlots(5)).toEqual(["breakfast", "lunch", "dinner", "snack", "snack"]);
+  });
+});
+
+describe("workout length (follow-up spec §4)", () => {
+  const levels = ["beginner", "intermediate", "advanced"] as const;
+  it("never goes over the minutes the user has, warm-up and rests included", () => {
+    for (const experience of levels) {
+      for (const sessionMinutes of [5, 10, 12, 15, 20, 25, 30, 45, 60, 90]) {
+        for (const location of [["home"], ["gym"]] as ("home" | "gym")[][]) {
+          const i = input({ experience, sessionMinutes, location });
+          const plan = composeWeek(i);
+          for (const d of plan.days.filter((x) => x.workout)) {
+            const w = d.workout!;
+            const slugOf = (id: string) => i.exercises.find((e) => e.id === id)?.slug;
+            const real = toMinutes(totalSeconds(w.blocks, warmupSeconds(sessionMinutes), slugOf));
+            expect(w.estimated_minutes).toBe(real);
+            expect(w.estimated_minutes).toBeLessThanOrEqual(sessionMinutes);
+            expect(w.budget_minutes).toBe(sessionMinutes);
+          }
+          expect(validatePlan(plan, { ...i, allergies: [], sessionMinutes }).ok).toBe(true);
+        }
+      }
+    }
+  });
+  it("gives a 10-minute user a workout of up to 10 minutes and keeps the longer one aside", () => {
+    const plan = composeWeek(input({ sessionMinutes: 10, experience: "intermediate" }));
+    const w = plan.days.find((d) => d.workout)!.workout!;
+    expect(w.estimated_minutes).toBeLessThanOrEqual(10);
+    expect(w.estimated_minutes).toBeGreaterThanOrEqual(6);
+    expect(w.full?.estimated_minutes).toBeGreaterThan(10);
+  });
+  it("rejects a 17-minute workout for a user who has 10", () => {
+    const i = input({ sessionMinutes: 10 });
+    const plan = composeWeek(i);
+    plan.days.find((d) => d.workout)!.workout!.estimated_minutes = 17;
+    const v = validatePlan(plan, { ...i, allergies: [], sessionMinutes: 10 });
+    expect(v.ok).toBe(false);
+  });
+  it("trims rests before sets and sets before exercises", () => {
+    const blocks = [1, 2, 3].map((n) => ({ exercise_id: String(n), sets: 3, reps: 12, rest_seconds: 75 }));
+    const fitted = fitBlocks(blocks, 10)!;
+    expect(fitted).toHaveLength(3);
+    expect(fitted.every((b) => b.rest_seconds === 30)).toBe(true);
+    expect(totalSeconds(fitted, warmupSeconds(10))).toBeLessThanOrEqual(600);
+  });
+  it("counts both sides for one-sided exercises", () => {
+    const b = { exercise_id: "x", sets: 2, reps: 10, rest_seconds: 60 };
+    expect(totalSeconds([b], 0, () => "reverse-lunge")).toBe(totalSeconds([b], 0) + 2 * 10 * REP_SECONDS);
   });
 });
 

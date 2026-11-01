@@ -37,10 +37,22 @@ export const exerciseBlockSchema = z
 export const workoutSchema = z.object({
   title: shortText,
   location: z.enum(["home", "gym", "outdoors"]),
-  estimated_minutes: z.int().min(5).max(120),
+  // Total time: warm-up, sets, rests and moving between exercises (follow-up spec §4).
+  estimated_minutes: z.int().min(1).max(120),
   difficulty: z.enum(["beginner", "intermediate", "advanced"]),
   blocks: z.array(exerciseBlockSchema).min(1).max(12),
   why: shortText, // what this workout trains, in plain words
+  // Added with the time fix. Plans saved before it lack these fields.
+  warmup_minutes: z.int().min(0).max(10).optional(),
+  /** The minutes the user said they have. estimated_minutes never goes above it. */
+  budget_minutes: z.int().min(5).max(180).optional(),
+  /** A longer version, shown only if the user asks for it, when it does not fit the budget. */
+  full: z
+    .object({
+      estimated_minutes: z.int().min(1).max(120),
+      blocks: z.array(exerciseBlockSchema).min(1).max(12),
+    })
+    .optional(),
 });
 
 export const habitSchema = z.object({

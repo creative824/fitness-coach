@@ -9,7 +9,12 @@ import { WeekStrip } from "@/components/ui/week-strip";
 import { requireUser } from "@/lib/data/user";
 import { getDictionary } from "@/lib/i18n/he";
 import { getProfileSummary } from "@/lib/data/profile";
-import { loadDayTasks } from "@/lib/plan/data";
+import { WhyCard } from "@/components/plan/why-card";
+import { loadOnboarding } from "@/lib/onboarding/data";
+import { loadDayTasks, loadWeek } from "@/lib/plan/data";
+import { weekdayOf, weekStartOf } from "@/lib/plan/week";
+import { whyThisPlan } from "@/lib/plan/why";
+import { screenSafety } from "@/lib/safety/screen";
 import { loadWaterToday } from "@/lib/water/data";
 import { localDay } from "@/lib/water/time";
 
@@ -30,12 +35,15 @@ export default function TodayPage() {
 async function Today() {
   const user = await requireUser();
   const { date, minutes } = localDay(new Date());
-  const [profile, day, water] = await Promise.all([
+  const [profile, day, water, week, onboarding] = await Promise.all([
     getProfileSummary(user.id),
     loadDayTasks(user.id, date).catch(() => ({ hasPlan: false, tasks: [] })),
     // Hidden if the 0002 migration has not run yet.
     loadWaterToday(user.id).catch(() => null),
+    loadWeek(user.id, weekStartOf(date)).catch(() => null),
+    loadOnboarding(user.id).catch(() => null),
   ]);
+  const why = week && onboarding ? whyThisPlan(onboarding.draft, week.plan, screenSafety(onboarding.draft), 2) : [];
   const name = profile?.display_name;
   const ready = Boolean(profile?.onboarding_completed_at);
 
@@ -62,6 +70,7 @@ async function Today() {
         <TodayBoard
           key={`${date}:${day.tasks.length}:${day.tasks[0]?.id ?? ""}`}
           tasks={day.tasks}
+          workoutHref={`/plan?d=${weekdayOf(date)}`}
           water={
             water
               ? {
@@ -86,7 +95,11 @@ async function Today() {
             </ButtonLink>
           }
         />
-      ) : !day.hasPlan ? (
+      ) : null}
+
+      {ready && day.hasPlan ? <WhyCard lines={why} compact /> : null}
+
+      {!ready ? null : !day.hasPlan ? (
         <EmptyState icon={<CalendarDays aria-hidden="true" />} title={s.noPlanTitle} body={s.noPlanBody} action={<CreatePlanButton />} />
       ) : (
         <ButtonLink href="/plan" variant="secondary">
