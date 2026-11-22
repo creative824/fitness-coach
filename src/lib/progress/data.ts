@@ -115,3 +115,24 @@ export async function loadWeekScores(userId: string, weekStart: string): Promise
   const all = [...byDay.values()];
   return { previous: all.slice(0, 7), days: all.slice(7) };
 }
+
+export type WorkoutMark = "done" | "partial" | "planned";
+
+/** The workout task of each day in a range (only days that had one). */
+export async function loadWorkoutDays(userId: string, from: string, to: string): Promise<Record<string, WorkoutMark>> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("daily_tasks")
+    .select("date, status, plans!inner(status)")
+    .eq("user_id", userId)
+    .eq("type", "workout")
+    .eq("plans.status", "active")
+    .gte("date", from)
+    .lte("date", to);
+  if (error) return {};
+  const out: Record<string, WorkoutMark> = {};
+  for (const r of (data ?? []) as { date: string; status: string }[]) {
+    out[r.date] = r.status === "done" || r.status === "swapped" ? "done" : r.status === "partial" ? "partial" : "planned";
+  }
+  return out;
+}

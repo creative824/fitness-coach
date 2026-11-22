@@ -1,29 +1,38 @@
 import type { Metadata } from "next";
-import { ArrowLeft, CalendarDays, ClipboardList, Salad, Sparkles } from "lucide-react";
+import { ArrowLeft, ClipboardList } from "lucide-react";
 import { Suspense } from "react";
+import { CompetitionsStrip } from "@/components/home/competitions-strip";
+import { DayProvider } from "@/components/home/day-context";
+import { FitnessCard, type SmallTask, type WorkoutBlock } from "@/components/home/fitness-card";
+import { MenuCard } from "@/components/home/menu-card";
+import { StatusCard, type WeekDayStat } from "@/components/home/status-card";
 import { ButtonLink } from "@/components/ui/button";
-import { CreatePlanButton } from "@/components/plan/create-plan-button";
-import { TodayBoard } from "@/components/today/today-board";
 import { EmptyState, LoadingState } from "@/components/ui/states";
-import { WeekStrip } from "@/components/ui/week-strip";
+import { EXERCISES } from "@/content/exercises";
+import { competitionCards } from "@/lib/competitions/data";
+import { loadDayContext } from "@/lib/day/context";
 import { requireUser } from "@/lib/data/user";
+import { loadFoodDay, loadFoodRange } from "@/lib/food/data";
 import { getDictionary } from "@/lib/i18n/he";
-import { getProfileSummary } from "@/lib/data/profile";
-import { WhyCard } from "@/components/plan/why-card";
-import { loadOnboarding } from "@/lib/onboarding/data";
-import { loadDayTasks, loadWeek } from "@/lib/plan/data";
-import { weekdayOf, weekStartOf } from "@/lib/plan/week";
-import { whyThisPlan } from "@/lib/plan/why";
-import { personalNote } from "@/lib/knowledge/personal";
-import { screenSafety } from "@/lib/safety/screen";
+import { loadDayLog } from "@/lib/menu/data";
+import { toView } from "@/lib/menu/view";
+import { generateWeekPlan, loadDayTasks, loadWeek } from "@/lib/plan/data";
+import { PER_SIDE } from "@/lib/plan/duration";
+import { addDays, weekdayOf, weekStartOf } from "@/lib/plan/week";
+import { bmiOf } from "@/lib/progress/bmi";
+import { loadWeekScores } from "@/lib/progress/data";
 import { loadWaterToday } from "@/lib/water/data";
+import { dailyWaterTargetMl } from "@/lib/water/plan";
 import { localDay } from "@/lib/water/time";
-import { loadFoodDay } from "@/lib/food/data";
 
 const t = getDictionary();
 const s = t.screens.today;
 
 export const metadata: Metadata = { title: s.title };
+
+const easierName = new Map(EXERCISES.map((e) => [e.slug, e.name_he]));
+const LETTERS = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
+const longDate = new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
 
 export default function TodayPage() {
   return (
@@ -33,66 +42,22 @@ export default function TodayPage() {
   );
 }
 
-/** Tasks of today from the active plan, the daily meter and the water card. */
+const mid = (r: [number, number] | null | undefined) => (r ? Math.round((r[0] + r[1]) / 2) : null);
+
+/**
+ * The one screen to follow the day: competitions, today's / this week's status, the menu and
+ * the workout. Everything else is one tap away.
+ */
 async function Today() {
   const user = await requireUser();
-  const { date, minutes } = localDay(new Date());
-  const [profile, day, water, week, onboarding, food] = await Promise.all([
-    getProfileSummary(user.id),
-    loadDayTasks(user.id, date).catch(() => ({ hasPlan: false, tasks: [] })),
-    // Hidden if the 0002 migration has not run yet.
-    loadWaterToday(user.id).catch(() => null),
-    loadWeek(user.id, weekStartOf(date)).catch(() => null),
-    loadOnboarding(user.id).catch(() => null),
-    loadFoodDay(user.id, date).catch(() => null),
-  ]);
-  const confirmedMeals = food?.logs.filter((l) => l.status === "confirmed").length ?? 0;
-  const ctx = { draft: onboarding?.draft ?? null, plan: week?.plan ?? null };
-  const notes = Object.fromEntries(
-    (["plate", "strength", "walking", "water", "sleep"] as const).map((k) => [k, personalNote(k, ctx)]),
-  );
-  const why = week && onboarding ? whyThisPlan(onboarding.draft, week.plan, screenSafety(onboarding.draft), 2) : [];
-  const name = profile?.display_name;
-  const ready = Boolean(profile?.onboarding_completed_at);
+  const { date } = localDay(new Date());
+  const ctx = await loadDayContext(user.id);
+  const name = ctx.draft.display_name;
 
-  return (
-    <>
-      <header className="flex items-center justify-between gap-4 pt-1">
-        <div className="flex items-center gap-3">
-          <span
-            aria-hidden="true"
-            className="flex size-12 items-center justify-center rounded-full bg-accent text-lg font-semibold text-ink ring-4 ring-white"
-          >
-            {name ? name.trim().charAt(0) : <Sparkles className="size-5" />}
-          </span>
-          <div className="flex flex-col">
-            {name ? <span className="text-sm text-ink-muted">{s.greeting.replace("{name}", name)}</span> : null}
-            <h1 className="text-2xl leading-tight font-semibold">{s.title}</h1>
-          </div>
-        </div>
-      </header>
-
-      <WeekStrip label={s.weekLabel} />
-
-      {ready ? (
-        <TodayBoard
-          key={`${date}:${day.tasks.length}:${day.tasks[0]?.id ?? ""}`}
-          tasks={day.tasks}
-          workoutHref={`/plan?d=${weekdayOf(date)}`}
-          notes={notes}
-          water={
-            water
-              ? {
-                  ...water,
-                  workoutToday: day.tasks.some((x) => x.type === "workout"),
-                  nowMin: minutes,
-                }
-              : null
-          }
-        />
-      ) : null}
-
-      {!ready ? (
+  if (!ctx.ready) {
+    return (
+      <>
+        <Header name={name} date={date} />
         <EmptyState
           icon={<ClipboardList aria-hidden="true" />}
           title={s.emptyTitle}
@@ -100,41 +65,113 @@ async function Today() {
           action={
             <ButtonLink href="/onboarding">
               {s.emptyCta}
-              <ArrowLeft aria-hidden="true" className="size-4 transition-transform group-hover/btn:-translate-x-0.5" />
+              <ArrowLeft aria-hidden="true" className="size-4" />
             </ButtonLink>
           }
         />
-      ) : null}
+      </>
+    );
+  }
 
-      {ready ? (
-        <div className="flex flex-col gap-1.5">
-          <ButtonLink href="/food" variant="secondary">
-            <Salad aria-hidden="true" className="size-4 text-coral" />
-            דווח מה אכלתי
-          </ButtonLink>
-          {confirmedMeals ? (
-            <p className="text-center text-sm text-ink-muted">
-              היום ביומן: <span className="num">{confirmedMeals}</span> {confirmedMeals === 1 ? "ארוחה" : "ארוחות"}
-              {food?.tracking && food.totals.kcal ? (
-                <>
-                  {" "}· הערכה של <span className="num" dir="ltr">{`${food.totals.kcal[0]}–${food.totals.kcal[1]}`}</span> קל׳
-                </>
-              ) : null}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+  const weekStart = weekStartOf(date);
+  // Everything at once: one round of requests instead of a chain.
+  const tasksOf = () => loadDayTasks(user.id, date).catch(() => ({ hasPlan: false, tasks: [] as Awaited<ReturnType<typeof loadDayTasks>>["tasks"] }));
+  let [week, tasks] = await Promise.all([loadWeek(user.id, weekStart).catch(() => null), tasksOf()]);
+  const rest = Promise.all([
+    loadDayLog(user.id, date),
+    loadFoodDay(user.id, date).catch(() => null),
+    loadWaterToday(user.id).catch(() => null),
+    loadFoodRange(user.id, weekStart, addDays(weekStart, 6)).catch(() => ({ tracking: true, days: {} as Awaited<ReturnType<typeof loadFoodRange>>["days"] })),
+    loadWeekScores(user.id, weekStart).catch(() => null),
+  ]);
+  // The week's plan is made on its own the first time the week is opened.
+  if (!week) {
+    const made = await generateWeekPlan(user.id, weekStart).catch(() => null);
+    if (made?.ok) [week, tasks] = await Promise.all([loadWeek(user.id, weekStart).catch(() => null), tasksOf()]);
+  }
+  const [day, food, water, weekFood, weekScores] = await rest;
 
-      {ready && day.hasPlan ? <WhyCard lines={why} compact /> : null}
+  const planDay = week?.plan.days[weekdayOf(date)];
+  const w = planDay?.workout ?? null;
+  const blocks: WorkoutBlock[] = (w?.blocks ?? []).flatMap((b, index) => {
+    const ex = week?.exercises.get(b.exercise_id);
+    if (!ex) return [];
+    return [
+      {
+        index,
+        slug: ex.slug,
+        name: ex.name_he,
+        sets: b.sets,
+        reps: b.reps,
+        seconds: b.seconds,
+        rest: b.rest_seconds,
+        perSide: PER_SIDE.has(ex.slug),
+        primary: ex.primary_muscles,
+        steps: ex.instructions_he.split("\n").filter(Boolean),
+        cautions: ex.cautions_he,
+        easier: ex.easier_slug ? (easierName.get(ex.easier_slug) ?? null) : null,
+      },
+    ];
+  });
+  const workout = w && blocks.length ? { title: w.title, minutes: w.estimated_minutes, blocks } : null;
+  const doneBlocks = blocks.filter((b) => day.fitness.done.includes(`ex:${b.index}`)).length;
 
-      {!ready ? null : !day.hasPlan ? (
-        <EmptyState icon={<CalendarDays aria-hidden="true" />} title={s.noPlanTitle} body={s.noPlanBody} action={<CreatePlanButton />} />
-      ) : (
-        <ButtonLink href="/plan" variant="secondary">
-          {s.seeWeek}
-          <ArrowLeft aria-hidden="true" className="size-4 transition-transform group-hover/btn:-translate-x-0.5" />
-        </ButtonLink>
-      )}
-    </>
+  const small: SmallTask[] = tasks.tasks.flatMap((x) =>
+    x.type === "movement" || x.type === "recovery" || x.type === "habit"
+      ? [{ id: x.id, type: x.type, title: x.title, done: x.status !== "pending" && x.status !== "skipped" }]
+      : [],
+  );
+
+  const waterTask = tasks.tasks.find((x) => x.type === "water") ?? null;
+  const waterTarget = water
+    ? dailyWaterTargetMl({ weightKg: water.weightKg, workoutToday: Boolean(workout), medicalRestriction: water.medicalRestriction })
+    : null;
+
+  const weekStats: WeekDayStat[] = Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(weekStart, i);
+    const wt = weekScores?.days[i]?.tasks.find((x) => x.type === "workout");
+    return {
+      date: d,
+      letter: LETTERS[i],
+      kcal: mid(weekFood.days[d]?.totals.kcal),
+      workout: !wt ? "none" : wt.status === "done" || wt.status === "swapped" ? "done" : wt.status === "partial" ? "partial" : "planned",
+      isToday: d === date,
+      future: d > date,
+    };
+  });
+
+  const weight = ctx.hideWeight || !ctx.weightKg ? null : { kg: ctx.weightKg, bmi: bmiOf(ctx.weightKg, ctx.heightCm) };
+
+  return (
+    <DayProvider eatenKcal={mid(food?.totals.kcal) ?? 0} workout={{ done: doneBlocks, total: blocks.length }} activeMinutes={day.fitness.acts.reduce((a, x) => a + x.min, 0)}>
+      <Header name={name} date={date} />
+      <Suspense fallback={<div className="h-[76px] animate-pulse rounded-[var(--radius-card)] bg-white/60" aria-hidden="true" />}>
+        <Competitions userId={user.id} today={date} />
+      </Suspense>
+      <StatusCard
+        target={ctx.target}
+        showNumbers={ctx.showNumbers}
+        week={weekStats}
+        water={water ? { drank: water.logs.reduce((a, b) => a + b, 0), target: waterTarget, vesselMl: water.vesselMl, taskId: waterTask?.id ?? null } : null}
+        weight={weight}
+      />
+      <MenuCard initial={toView(day.menu, ctx.profile)} showNumbers={ctx.showNumbers} saved={day.saved} aiEnabled={Boolean(process.env.GEMINI_API_KEY)} />
+      <FitnessCard workout={workout} tasks={small} initial={day.fitness} weightKg={ctx.weightKg} saved={day.saved} />
+    </DayProvider>
+  );
+}
+
+/** Streams in on its own: one request per competition should not hold up the rest of the day. */
+async function Competitions({ userId, today }: { userId: string; today: string }) {
+  const items = await competitionCards(userId).catch(() => []);
+  return <CompetitionsStrip items={items} today={today} />;
+}
+
+function Header({ name, date }: { name: string; date: string }) {
+  return (
+    <header className="flex items-baseline justify-between gap-3 pt-1">
+      <h1 className="text-2xl leading-tight font-semibold">{name ? `היי ${name.trim()}` : s.title}</h1>
+      <span className="text-sm text-ink-muted">{longDate.format(new Date(`${date}T12:00:00Z`))}</span>
+    </header>
   );
 }

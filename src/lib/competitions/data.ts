@@ -103,3 +103,43 @@ export async function prizeTotal(userId: string): Promise<number> {
   const { data } = await supabase.from("leaderboard_results").select("prize_points").eq("user_id", userId);
   return (data ?? []).reduce((s, r) => s + ((r as { prize_points: number }).prize_points ?? 0), 0);
 }
+
+export interface CompetitionCard {
+  id: string;
+  name: string;
+  kind: Kind;
+  status: Status;
+  start_date: string;
+  end_date: string;
+  rank: number | null;
+  members: number;
+  score: number | null;
+}
+
+/** Active and upcoming competitions with the user's place, for the top of the today screen. */
+export async function competitionCards(userId: string, limit = 4): Promise<CompetitionCard[]> {
+  const list = (await listCompetitions(userId)).filter((c) => c.status === "active" || c.status === "upcoming").slice(0, limit);
+  if (!list.length) return [];
+  const supabase = await createClient();
+  const standings = await Promise.all(
+    list.map((c) =>
+      supabase
+        .rpc("leaderboard_standings", { p_id: c.id })
+        .then(({ data }) => (data ?? []) as Standing[], () => [] as Standing[]),
+    ),
+  );
+  return list.map((c, i) => {
+    const me = standings[i].find((s) => s.is_me);
+    return {
+      id: c.id,
+      name: c.name,
+      kind: c.kind,
+      status: c.status,
+      start_date: c.start_date,
+      end_date: c.end_date,
+      rank: me?.rank ?? null,
+      members: standings[i].length,
+      score: me?.score ?? null,
+    };
+  });
+}

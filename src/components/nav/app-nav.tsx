@@ -3,18 +3,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense } from "react";
-import { CalendarDays, Home, LineChart, MessageCircle, Trophy, UserRound } from "lucide-react";
+import { Home, LineChart, MessageCircle, Trophy, UserRound } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { getDictionary } from "@/lib/i18n/he";
 
 const t = getDictionary();
 
+/** Four places: the day, tracking, competitions and the coach. The weekly plan and the food log open from the day. */
 const items = [
   { href: "/today", label: t.nav.today, Icon: Home },
-  { href: "/plan", label: t.nav.plan, Icon: CalendarDays },
-  { href: "/coach", label: t.nav.coach, Icon: MessageCircle },
   { href: "/progress", label: t.nav.progress, Icon: LineChart },
   { href: "/competitions", label: t.nav.competitions, Icon: Trophy },
+  { href: "/coach", label: t.nav.coach, Icon: MessageCircle },
 ] as const;
 
 type IsActive = (href: string) => boolean;
@@ -59,7 +59,7 @@ export const TopBar = withPath(function TopBarView({ isActive }) {
 });
 
 /**
- * Mobile: a floating graphite pill (spec §4: five items). The active item opens into a lime
+ * Mobile: a floating graphite pill (four items). The active item opens into a lime
  * capsule with its label; the others are icons with accessible names. Hidden from md up.
  */
 export const BottomNav = withPath(function BottomNavView({ isActive }) {

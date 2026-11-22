@@ -4,13 +4,14 @@ import { useState, useTransition } from "react";
 import { Card } from "@/components/ui/card";
 import { getDictionary } from "@/lib/i18n/he";
 import { logWeight } from "@/lib/progress/actions";
+import { bmiBand, bmiOf, BMI_BANDS } from "@/lib/progress/bmi";
 import { trendChange, weeklyAverages, type WeightEntry } from "@/lib/progress/trend";
 
 const s = getDictionary().screens.progress;
 const shortDate = new Intl.DateTimeFormat("he-IL", { day: "numeric", month: "numeric", timeZone: "UTC" });
 
 /** Weight entry and weekly trend. The chart updates on save, before the server answers. */
-export function WeightCard({ initial, today }: { initial: WeightEntry[]; today: string }) {
+export function WeightCard({ initial, today, heightCm = null, fallbackKg = null }: { initial: WeightEntry[]; today: string; heightCm?: number | null; fallbackKg?: number | null }) {
   const [entries, setEntries] = useState(initial);
   const [value, setValue] = useState("");
   const [error, setError] = useState(false);
@@ -19,6 +20,7 @@ export function WeightCard({ initial, today }: { initial: WeightEntry[]; today: 
   const points = weeklyAverages(entries);
   const change = trendChange(points);
   const latest = entries.at(-1);
+  const bmi = bmiOf(latest?.weight_kg ?? fallbackKg, heightCm);
 
   function save(e: React.FormEvent) {
     e.preventDefault();
@@ -50,7 +52,7 @@ export function WeightCard({ initial, today }: { initial: WeightEntry[]; today: 
   const y = (v: number) => 12 + ((max - v) / (max - min || 1)) * (H - 36);
 
   return (
-    <Card className="flex flex-col gap-4">
+    <Card className="flex scroll-mt-6 flex-col gap-4" id="weight">
       <div className="flex items-baseline justify-between gap-2">
         <h2 className="text-lg font-semibold">{s.weightTitle}</h2>
         {latest ? (
@@ -59,6 +61,8 @@ export function WeightCard({ initial, today }: { initial: WeightEntry[]; today: 
           </span>
         ) : null}
       </div>
+
+      {bmi ? <BmiBar bmi={bmi} heightCm={heightCm!} /> : null}
 
       {points.length ? (
         <figure className="flex flex-col gap-2">
@@ -121,5 +125,49 @@ export function WeightCard({ initial, today }: { initial: WeightEntry[]; today: 
       ) : null}
       <p className="text-xs text-ink-muted">{s.weightNote}</p>
     </Card>
+  );
+}
+
+const TONE: Record<(typeof BMI_BANDS)[number]["tone"], string> = {
+  sky: "bg-sky",
+  accent: "bg-accent",
+  warning: "bg-[#f5c451]",
+  coral: "bg-coral",
+};
+
+/** BMI on a 15–40 scale with the WHO bands. */
+function BmiBar({ bmi, heightCm }: { bmi: number; heightCm: number }) {
+  const band = bmiBand(bmi);
+  const lo = 15;
+  const hi = 40;
+  const pos = (v: number) => `${((Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo)) * 100}%`;
+  const widths = BMI_BANDS.map((b, i) => ((Math.min(hi, b.max) - (i ? BMI_BANDS[i - 1].max : lo)) / (hi - lo)) * 100);
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-field p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-sm text-ink-muted">מדד מסת גוף (BMI)</span>
+        <span>
+          <span className="num text-2xl font-bold">{bmi}</span> <span className="text-sm font-medium">{band.label}</span>
+        </span>
+      </div>
+      <div className="relative" dir="ltr">
+        <div className="flex h-2.5 overflow-hidden rounded-full">
+          {BMI_BANDS.map((b, i) => (
+            <span key={b.label} className={`${TONE[b.tone]} h-full opacity-80`} style={{ width: `${widths[i]}%` }} />
+          ))}
+        </div>
+        <span className="absolute -top-1 size-4.5 -translate-x-1/2 rounded-full border-[3px] border-surface bg-ink shadow" style={{ left: pos(bmi) }} aria-hidden="true" />
+        <div className="num relative mt-1 h-3 text-[10px] text-ink-muted">
+          {[18.5, 25, 30].map((v) => (
+            <span key={v} className="absolute -translate-x-1/2" style={{ left: pos(v) }}>
+              {v}
+            </span>
+          ))}
+        </div>
+      </div>
+      <p className="text-[11px] text-ink-muted">
+        לפי גובה <span className="num">{heightCm}</span> ס״מ. המדד לא מבדיל בין שריר לשומן, ולכן הוא כיוון כללי בלבד.
+      </p>
+    </div>
   );
 }
