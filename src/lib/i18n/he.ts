@@ -12,7 +12,7 @@ export const he = {
     today: "היום",
     plan: "התוכנית",
     coach: "המאמן",
-    progress: "התקדמות",
+    progress: "מעקב",
     profile: "פרופיל",
     competitions: "תחרויות",
     mainLabel: "ניווט ראשי",
@@ -285,7 +285,7 @@ export const he = {
       disclaimer: "המאמן אינו רופא או דיאטן קליני.",
     },
     progress: {
-      title: "התקדמות",
+      title: "מעקב",
       emptyBody: "אחרי כמה ימים של סימון משימות תראו כאן מגמות: התמדה, אימונים, משקל ותחושה.",
       consistencyTitle: "התמדה בשבועיים האחרונים",
       consistencyNote: "כל עמודה היא יום: כמה מהנקודות האפשריות צברת. יום חלש או יום מחלה הם חלק מהדרך.",
