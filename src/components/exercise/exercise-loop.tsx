@@ -44,12 +44,16 @@ export function ExerciseLoop({ slug, highlight, className = "" }: { slug: string
     const step = HOLD_MS + MOVE_MS;
     const start = performance.now();
     let raf = 0;
+    let last = 0;
     const tick = (now: number) => {
+      raf = requestAnimationFrame(tick);
+      // About 30 frames a second is smooth enough and keeps several tiles light on a phone.
+      if (now - last < 33) return;
+      last = now;
       const t = (now - start) % (n * step);
       const i = Math.floor(t / step);
       const inStep = t - i * step;
       setPose(blend(solved[i], solved[(i + 1) % n], inStep < HOLD_MS ? 0 : ease((inStep - HOLD_MS) / MOVE_MS)));
-      raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);

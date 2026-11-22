@@ -74,22 +74,22 @@ async function Today() {
   }
 
   const weekStart = weekStartOf(date);
-  // The week's plan is made on its own the first time the week is opened.
-  let week = await loadWeek(user.id, weekStart).catch(() => null);
-  if (!week) {
-    const made = await generateWeekPlan(user.id, weekStart).catch(() => null);
-    if (made?.ok) week = await loadWeek(user.id, weekStart).catch(() => null);
-  }
-
-  const [day, tasks, food, water, comps, weekFood, weekScores] = await Promise.all([
+  // Everything at once: one round of requests instead of a chain.
+  const tasksOf = () => loadDayTasks(user.id, date).catch(() => ({ hasPlan: false, tasks: [] as Awaited<ReturnType<typeof loadDayTasks>>["tasks"] }));
+  let [week, tasks] = await Promise.all([loadWeek(user.id, weekStart).catch(() => null), tasksOf()]);
+  const rest = Promise.all([
     loadDayLog(user.id, date),
-    loadDayTasks(user.id, date).catch(() => ({ hasPlan: false, tasks: [] })),
     loadFoodDay(user.id, date).catch(() => null),
     loadWaterToday(user.id).catch(() => null),
-    competitionCards(user.id).catch(() => []),
     loadFoodRange(user.id, weekStart, addDays(weekStart, 6)).catch(() => ({ tracking: true, days: {} as Awaited<ReturnType<typeof loadFoodRange>>["days"] })),
     loadWeekScores(user.id, weekStart).catch(() => null),
   ]);
+  // The week's plan is made on its own the first time the week is opened.
+  if (!week) {
+    const made = await generateWeekPlan(user.id, weekStart).catch(() => null);
+    if (made?.ok) [week, tasks] = await Promise.all([loadWeek(user.id, weekStart).catch(() => null), tasksOf()]);
+  }
+  const [day, food, water, weekFood, weekScores] = await rest;
 
   const planDay = week?.plan.days[weekdayOf(date)];
   const w = planDay?.workout ?? null;
@@ -145,7 +145,9 @@ async function Today() {
   return (
     <DayProvider eatenKcal={mid(food?.totals.kcal) ?? 0} workout={{ done: doneBlocks, total: blocks.length }} activeMinutes={day.fitness.acts.reduce((a, x) => a + x.min, 0)}>
       <Header name={name} date={date} />
-      <CompetitionsStrip items={comps} today={date} />
+      <Suspense fallback={<div className="h-[76px] animate-pulse rounded-[var(--radius-card)] bg-white/60" aria-hidden="true" />}>
+        <Competitions userId={user.id} today={date} />
+      </Suspense>
       <StatusCard
         target={ctx.target}
         showNumbers={ctx.showNumbers}
@@ -157,6 +159,12 @@ async function Today() {
       <FitnessCard workout={workout} tasks={small} initial={day.fitness} weightKg={ctx.weightKg} saved={day.saved} />
     </DayProvider>
   );
+}
+
+/** Streams in on its own: one request per competition should not hold up the rest of the day. */
+async function Competitions({ userId, today }: { userId: string; today: string }) {
+  const items = await competitionCards(userId).catch(() => []);
+  return <CompetitionsStrip items={items} today={today} />;
 }
 
 function Header({ name, date }: { name: string; date: string }) {

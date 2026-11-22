@@ -1,5 +1,6 @@
 import "server-only";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
@@ -11,9 +12,10 @@ export interface CurrentUser {
 
 /**
  * Data Access Layer entry point: verifies the session on the server and returns a narrow user.
+ * Cached per request, so pages and loaders that each call it check the session once.
  * The proxy already redirects anonymous visitors; this is the second, authoritative check.
  */
-export async function requireUser(): Promise<CurrentUser> {
+export const requireUser = cache(async function requireUser(): Promise<CurrentUser> {
   if (!isSupabaseConfigured()) redirect("/login");
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
@@ -21,4 +23,4 @@ export async function requireUser(): Promise<CurrentUser> {
   if (!claims?.sub) redirect("/login");
   const appMeta = (claims.app_metadata ?? {}) as { role?: string };
   return { id: claims.sub, email: (claims.email as string | undefined) ?? null, isAdmin: appMeta.role === "admin" };
-}
+});
