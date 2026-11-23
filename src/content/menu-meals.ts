@@ -16,9 +16,12 @@ export interface MenuMeal {
   parts: { food: FoodKey; qty: number; fixed?: boolean }[];
   /** One short line on how to put it together. */
   tip?: string;
+  /** A light meal (about 200–300 kcal as written), shown with a "קליל" mark. */
+  light?: boolean;
 }
 
 const salad = { food: "salad" as const, qty: 1, fixed: true };
+const sticks = { food: "vegSticks" as const, qty: 1, fixed: true };
 
 export const MENU_MEALS: MenuMeal[] = [
   // ── Breakfast ──────────────────────────────────────────────
@@ -47,6 +50,32 @@ export const MENU_MEALS: MenuMeal[] = [
   { slug: "turkey-sandwich", title: "כריך פסטרמה הודו עם אבוקדו", slots: ["breakfast", "lunch"],
     parts: [{ food: "bread", qty: 2 }, { food: "turkey", qty: 4 }, { food: "avocado", qty: 30 }, salad] },
 
+  // Lighter mornings: ideas from Israeli and international lists of breakfasts under 300 kcal.
+  { slug: "yogurt-fruit", title: "יוגורט חלבון עם פרי", slots: ["breakfast"], light: true,
+    parts: [{ food: "yogurt", qty: 200 }, { food: "fruit", qty: 1 }], tip: "אפשר לפזר קינמון מעל." },
+  { slug: "cottage-slice-veg", title: "קוטג׳ עם פרוסת לחם וירקות", slots: ["breakfast"], light: true,
+    parts: [{ food: "cottage", qty: 125 }, { food: "bread", qty: 1 }, sticks] },
+  { slug: "boiled-eggs-slice", title: "ביצים קשות, פרוסת לחם וירקות", slots: ["breakfast"], light: true,
+    parts: [{ food: "egg", qty: 2 }, { food: "bread", qty: 1 }, sticks], tip: "אפשר להכין כמה ביצים מראש לכל השבוע." },
+  { slug: "berry-smoothie", title: "שייק בננה, פירות יער וחלב", slots: ["breakfast"],
+    parts: [{ food: "milk", qty: 250 }, { food: "banana", qty: 1 }, { food: "berries", qty: 100 }, { food: "oats", qty: 30 }], tip: "הכול לבלנדר עם כמה קוביות קרח." },
+  { slug: "oat-pancakes", title: "פנקייק שיבולת שועל ובננה", slots: ["breakfast"],
+    parts: [{ food: "oats", qty: 40 }, { food: "egg", qty: 2 }, { food: "banana", qty: 1 }, { food: "honey", qty: 1 }], tip: "טוחנים שיבולת שועל, בננה וביצים לבלילה ומטגנים במחבת נגד הדבקה." },
+  { slug: "labaneh-toast", title: "טוסט לבנה, זעתר וירקות", slots: ["breakfast", "dinner"], light: true,
+    parts: [{ food: "bread", qty: 2 }, { food: "labaneh", qty: 50 }, salad] },
+  { slug: "feta-tomato-slice", title: "גבינה בולגרית, עגבנייה ופרוסת לחם", slots: ["breakfast"], light: true,
+    parts: [{ food: "feta", qty: 50 }, { food: "bread", qty: 1 }, salad] },
+  { slug: "yogurt-granola", title: "יוגורט עם גרנולה ופרי", slots: ["breakfast"],
+    parts: [{ food: "yogurt", qty: 150 }, { food: "granola", qty: 30 }, { food: "fruit", qty: 1 }] },
+  { slug: "ricecake-avocado-egg", title: "פריכיות עם אבוקדו וביצה", slots: ["breakfast"], light: true,
+    parts: [{ food: "riceCake", qty: 2 }, { food: "avocado", qty: 40 }, { food: "egg", qty: 1 }] },
+  { slug: "pudding-fruit", title: "מעדן חלבון ופרי", slots: ["breakfast"], light: true,
+    parts: [{ food: "proteinPudding", qty: 1 }, { food: "fruit", qty: 1 }], tip: "הכי מהיר: מתאים כשאין זמן בבוקר." },
+  { slug: "tuna-ricecakes", title: "פריכיות עם סלט טונה", slots: ["breakfast", "dinner"], light: true,
+    parts: [{ food: "riceCake", qty: 3 }, { food: "tuna", qty: 80 }, sticks] },
+  { slug: "pb-banana-toast", title: "טוסט חמאת בוטנים ובננה", slots: ["breakfast"],
+    parts: [{ food: "bread", qty: 2 }, { food: "peanutButter", qty: 1 }, { food: "banana", qty: 1 }] },
+
   // ── Snacks ─────────────────────────────────────────────────
   { slug: "apple-pb", title: "תפוח עם חמאת בוטנים", slots: ["snack"], parts: [{ food: "apple", qty: 1 }, { food: "peanutButter", qty: 1 }] },
   { slug: "yogurt-berries", title: "יוגורט חלבון עם פירות יער", slots: ["snack"], parts: [{ food: "yogurt", qty: 150 }, { food: "berries", qty: 100 }] },
@@ -60,6 +89,17 @@ export const MENU_MEALS: MenuMeal[] = [
   { slug: "cottage-veg", title: "קוטג׳ עם מקלות ירקות", slots: ["snack"], parts: [{ food: "cottage", qty: 125 }, { food: "vegSticks", qty: 1, fixed: true }] },
   { slug: "edamame", title: "אדממה מאודה", slots: ["snack"], parts: [{ food: "edamame", qty: 125 }] },
   { slug: "milk-fruit", title: "כוס חלב ופרי", slots: ["snack"], parts: [{ food: "milk", qty: 200 }, { food: "fruit", qty: 1 }] },
+  { slug: "corn", title: "קלח תירס", slots: ["snack"], parts: [{ food: "cornCob", qty: 1 }] },
+  { slug: "popcorn", title: "פופקורן ביתי", slots: ["snack"], parts: [{ food: "popcorn", qty: 25 }], tip: "בסיר עם מכסה, בלי חמאה." },
+  { slug: "chocolate-almonds", title: "שוקולד מריר ושקדים", slots: ["snack"], parts: [{ food: "darkChocolate", qty: 10 }, { food: "almonds", qty: 10 }] },
+  { slug: "pudding", title: "מעדן חלבון", slots: ["snack"], parts: [{ food: "proteinPudding", qty: 1 }] },
+  { slug: "feta-sticks", title: "גבינה בולגרית עם מקלות ירקות", slots: ["snack"], parts: [{ food: "feta", qty: 50 }, sticks] },
+  { slug: "labaneh-ricecakes", title: "פריכיות עם לבנה", slots: ["snack"], parts: [{ food: "riceCake", qty: 2 }, { food: "labaneh", qty: 40 }] },
+  { slug: "yogurt-granola-small", title: "יוגורט עם כף גרנולה", slots: ["snack"], parts: [{ food: "yogurt", qty: 150 }, { food: "granola", qty: 20 }] },
+  { slug: "turkey-rolls", title: "רולדות פסטרמה הודו ומלפפון", slots: ["snack"], parts: [{ food: "turkey", qty: 4 }, sticks] },
+  { slug: "fruit-cheese", title: "פרי ופרוסת גבינה צהובה", slots: ["snack"], parts: [{ food: "fruit", qty: 1 }, { food: "yellowCheese", qty: 1 }] },
+  { slug: "berry-milk-shake", title: "שייק פירות יער וחלב", slots: ["snack"], parts: [{ food: "milk", qty: 200 }, { food: "berries", qty: 100 }] },
+  { slug: "roasted-chickpeas", title: "גרגרי חומוס קלויים", slots: ["snack"], parts: [{ food: "chickpeas", qty: 75 }], tip: "בתנור 25 דקות עם פפריקה וכמון." },
 
   // ── Lunch ──────────────────────────────────────────────────
   { slug: "chicken-rice", title: "חזה עוף, אורז וסלט", slots: ["lunch", "dinner"],
@@ -85,6 +125,27 @@ export const MENU_MEALS: MenuMeal[] = [
   { slug: "chicken-potato", title: "עוף צלוי, תפוח אדמה וירקות", slots: ["lunch", "dinner"],
     parts: [{ food: "chicken", qty: 150 }, { food: "potato", qty: 200 }, { food: "cookedVeg", qty: 150, fixed: true }, { food: "oil", qty: 1 }] },
 
+  { slug: "chicken-wrap", title: "טורטייה מלאה עם חזה עוף ואבוקדו", slots: ["lunch", "dinner"],
+    parts: [{ food: "tortilla", qty: 1 }, { food: "chicken", qty: 100 }, { food: "avocado", qty: 30 }, salad], tip: "במקום מיונז: כף יוגורט עם לימון." },
+  { slug: "pargit-couscous", title: "פרגיות בתנור עם קוסקוס וסלט", slots: ["lunch"],
+    parts: [{ food: "pargit", qty: 130 }, { food: "couscous", qty: 150 }, salad] },
+  { slug: "sabich-light", title: "סביח קליל: פיתה, ביצה, חציל וטחינה", slots: ["lunch", "dinner"],
+    parts: [{ food: "pita", qty: 1 }, { food: "egg", qty: 1 }, { food: "cookedVeg", qty: 150, fixed: true }, { food: "tahini", qty: 1 }], tip: "החציל אפוי בתנור, לא מטוגן." },
+  { slug: "chicken-buckwheat", title: "חזה עוף עם כוסמת וירקות", slots: ["lunch"],
+    parts: [{ food: "chicken", qty: 130 }, { food: "buckwheat", qty: 150 }, { food: "cookedVeg", qty: 150, fixed: true }, { food: "oil", qty: 1 }] },
+  { slug: "white-beans-rice", title: "תבשיל שעועית לבנה עם אורז", slots: ["lunch"],
+    parts: [{ food: "whiteBeans", qty: 150 }, { food: "rice", qty: 125 }, salad] },
+  { slug: "tabbouleh-chicken", title: "טבולה בורגול עם חזה עוף", slots: ["lunch"],
+    parts: [{ food: "bulgur", qty: 150 }, { food: "chicken", qty: 100 }, salad, { food: "oil", qty: 1 }] },
+  { slug: "salmon-bowl", title: "קערת סלמון, אורז ואדממה", slots: ["lunch"],
+    parts: [{ food: "salmon", qty: 100 }, { food: "rice", qty: 125 }, { food: "edamame", qty: 75 }, sticks] },
+  { slug: "meatballs-rice", title: "קציצות בקר ברוטב עגבניות עם אורז", slots: ["lunch"],
+    parts: [{ food: "beef", qty: 120 }, { food: "tomatoSauce", qty: 100 }, { food: "rice", qty: 125 }] },
+  { slug: "pasta-tofu-veg", title: "פסטה מלאה עם טופו וירקות", slots: ["lunch"],
+    parts: [{ food: "pasta", qty: 150 }, { food: "tofu", qty: 100 }, { food: "cookedVeg", qty: 150, fixed: true }, { food: "oil", qty: 1 }] },
+  { slug: "lentil-feta-salad", title: "סלט עדשים עם גבינה בולגרית", slots: ["lunch", "dinner"],
+    parts: [{ food: "lentils", qty: 150 }, { food: "feta", qty: 50 }, salad, { food: "oil", qty: 1 }] },
+
   // ── Dinner ─────────────────────────────────────────────────
   { slug: "tuna-salad-bread", title: "סלט טונה עם לחם מלא", slots: ["dinner", "lunch"],
     parts: [{ food: "tuna", qty: 100 }, { food: "bread", qty: 2 }, salad, { food: "oil", qty: 1 }] },
@@ -102,4 +163,12 @@ export const MENU_MEALS: MenuMeal[] = [
     parts: [{ food: "vegSoup", qty: 400 }, { food: "egg", qty: 1 }, { food: "bread", qty: 1 }] },
   { slug: "yogurt-bowl", title: "יוגורט חלבון עם פרי ואגוזים", slots: ["dinner", "breakfast"],
     parts: [{ food: "yogurt", qty: 200 }, { food: "fruit", qty: 1 }, { food: "walnuts", qty: 10 }] },
+  { slug: "greek-salad", title: "סלט יווני עם בולגרית ופרוסת לחם", slots: ["dinner"],
+    parts: [{ food: "feta", qty: 75 }, { food: "bread", qty: 1 }, salad, { food: "oil", qty: 1 }] },
+  { slug: "chicken-veg-soup", title: "מרק ירקות עם חזה עוף", slots: ["dinner"],
+    parts: [{ food: "vegSoup", qty: 400 }, { food: "chicken", qty: 80 }] },
+  { slug: "fish-roast-veg", title: "פילה דג עם ירקות אפויים ופרוסת לחם", slots: ["dinner"],
+    parts: [{ food: "whiteFish", qty: 150 }, { food: "cookedVeg", qty: 200, fixed: true }, { food: "bread", qty: 1 }] },
+  { slug: "corn-egg-salad", title: "סלט ביצים ותירס עם פריכיות", slots: ["dinner"],
+    parts: [{ food: "egg", qty: 2 }, { food: "cornCob", qty: 1 }, { food: "riceCake", qty: 2 }, salad], tip: "תירס מקלח או מקופסה, עם ביצים קצוצות וירקות." },
 ];

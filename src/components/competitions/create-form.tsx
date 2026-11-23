@@ -12,13 +12,14 @@ import { DURATIONS, KIND_INFO, KINDS, type Kind } from "@/lib/competitions/rules
 const ERRORS = {
   invalid: "צריך שם לתחרות וכינוי.",
   limit: "אפשר להיות בעד 10 תחרויות פעילות בבת אחת.",
+  unsuitable: "לפי תשובות הבריאות שלך, תחרות ירידה במשקל לא מתאימה כרגע. אפשר להצטרף לתחרות התמדה או הרגלים.",
   failed: "לא הצלחנו ליצור את התחרות. אפשר לנסות שוב.",
 } as const;
 
 /** New competition: name, kind (with its formula), length, start day and a nickname. */
 export function CreateCompetitionForm({ defaultNickname }: { defaultNickname: string }) {
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<Kind>("consistency");
+  const [kind, setKind] = useState<Kind>("weight_loss");
   const [days, setDays] = useState<(typeof DURATIONS)[number]>(14);
   const [startTomorrow, setStartTomorrow] = useState(true);
   const [nickname, setNickname] = useState(defaultNickname);

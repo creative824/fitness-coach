@@ -1,7 +1,7 @@
 import "server-only";
 import { loadDayContext, type DayContext } from "@/lib/day/context";
 import { createClient } from "@/lib/supabase/server";
-import { buildMenu, seedFrom, type DayMenu } from "./engine";
+import { buildMenu, seedFrom, upgradeMenu, type DayMenu } from "./engine";
 
 export interface FitnessState {
   /** Keys of exercises marked done: "ex:<block index>". */
@@ -21,7 +21,7 @@ const EMPTY_FITNESS: FitnessState = { done: [], acts: [] };
 
 function isMenu(v: unknown): v is DayMenu {
   const m = v as DayMenu | null;
-  return Boolean(m && m.v === 1 && Array.isArray(m.slots) && typeof m.target === "number");
+  return Boolean(m && (m.v === 1 || m.v === 2) && Array.isArray(m.slots) && typeof m.target === "number");
 }
 
 export function fitnessOf(v: unknown): FitnessState {
@@ -33,7 +33,7 @@ export function fitnessOf(v: unknown): FitnessState {
 }
 
 export function freshMenu(ctx: DayContext, userId: string, date: string, seed = seedFrom(`${userId}:${date}`)): DayMenu {
-  return buildMenu({ target: ctx.menuKcal, mealsPerDay: ctx.mealsPerDay, profile: ctx.profile, seed });
+  return buildMenu({ target: ctx.menuKcal, mealsPerDay: ctx.mealsPerDay, profile: ctx.profile, seed, custom: ctx.slotKcal });
 }
 
 /** Today's row, creating the menu the first time the day is opened. */
@@ -42,7 +42,14 @@ export async function loadDayLog(userId: string, date: string): Promise<DayLog> 
   const ctx = await loadDayContext(userId);
   const { data, error } = await supabase.from("day_logs").select("menu, fitness").eq("user_id", userId).eq("date", date).maybeSingle();
   if (error) return { saved: false, menu: freshMenu(ctx, userId, date), fitness: EMPTY_FITNESS };
-  if (data && isMenu(data.menu)) return { saved: true, menu: data.menu, fitness: fitnessOf(data.fitness) };
+  if (data && isMenu(data.menu)) {
+    const menu = upgradeMenu(data.menu, { target: ctx.menuKcal, mealsPerDay: ctx.mealsPerDay, profile: ctx.profile, custom: ctx.slotKcal });
+    if (menu !== data.menu) {
+      const { error: upErr } = await supabase.from("day_logs").update({ menu }).eq("user_id", userId).eq("date", date);
+      if (upErr) console.error("day_logs menu upgrade failed", upErr.message);
+    }
+    return { saved: true, menu, fitness: fitnessOf(data.fitness) };
+  }
 
   const menu = freshMenu(ctx, userId, date);
   const write = data

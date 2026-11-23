@@ -1,7 +1,7 @@
 import { ChevronLeft, KeyRound, Plus, Trophy } from "lucide-react";
 import Link from "next/link";
 import type { CompetitionCard } from "@/lib/competitions/data";
-import { KIND_INFO, timeLeftLabel } from "@/lib/competitions/rules";
+import { KIND_INFO, scoreLabel, timeLeftLabel } from "@/lib/competitions/rules";
 
 /** Competitions the user is in, first thing on the today screen: place, score and time left. */
 export function CompetitionsStrip({ items, today }: { items: CompetitionCard[]; today: string }) {
@@ -75,7 +75,7 @@ export function CompetitionsStrip({ items, today }: { items: CompetitionCard[]; 
                   <span className="text-xs opacity-75">
                     {c.score !== null ? (
                       <>
-                        <span className="num font-semibold">{c.score}%</span>
+                        <span className="num font-semibold">{scoreLabel(c.kind, c.score)}</span>
                         {" · "}
                       </>
                     ) : null}

@@ -5,9 +5,10 @@ import { Suspense } from "react";
 import { BackLink } from "@/components/competitions/create-form";
 import { LeaveButton, OwnerPanel } from "@/components/competitions/manage";
 import { Card } from "@/components/ui/card";
+import { FaceAvatar, FaceWithName } from "@/components/ui/face-avatar";
 import { LoadingState } from "@/components/ui/states";
 import { loadCompetition, type CompetitionView } from "@/lib/competitions/data";
-import { KIND_INFO, PRIZES, SHARED_RULES, STATUS_LABEL, timeLeftLabel } from "@/lib/competitions/rules";
+import { KIND_INFO, PRIZES, SHARED_RULES, STATUS_LABEL, scoreBar, scoreLabel, timeLeftLabel, type Kind } from "@/lib/competitions/rules";
 import { requireUser } from "@/lib/data/user";
 import { localDay } from "@/lib/water/time";
 
@@ -59,6 +60,7 @@ async function CompetitionContent({ params }: { params: Promise<{ id: string }> 
       <Card className="flex flex-col gap-3">
         <h2 className="font-semibold">{view.results.length ? "הטבלה בסיום" : "הטבלה עכשיו"}</h2>
         {c.status === "upcoming" ? <p className="text-sm text-ink-muted">הניקוד יתחיל ביום הראשון של התחרות.</p> : null}
+        <Podium standings={standings} kind={c.kind} />
         <ol className="flex flex-col gap-2">
           {standings.map((s) => (
             <li
@@ -67,19 +69,20 @@ async function CompetitionContent({ params }: { params: Promise<{ id: string }> 
             >
               <div className="flex items-center gap-3">
                 <span className="w-6 text-center font-semibold tabular-nums">{s.rank ?? "–"}</span>
+                <FaceAvatar seed={s.member_key} config={s.avatar} size={36} />
                 <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate font-medium">
                   {s.display_name}
                   {s.is_owner ? <Crown aria-label="יוצר התחרות" className="size-3.5 shrink-0 text-ink-muted" /> : null}
                   {s.is_me ? <span className="text-xs text-ink-muted">(את/ה)</span> : null}
                 </span>
-                <span className="font-semibold tabular-nums">{s.score === null ? "–" : `${s.score}%`}</span>
+                <span className="font-semibold tabular-nums">{scoreLabel(c.kind, s.score)}</span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-white" aria-hidden="true">
-                <div className="h-full rounded-full bg-night" style={{ width: `${s.score ?? 0}%` }} />
+                <div className="h-full rounded-full bg-night" style={{ width: `${scoreBar(c.kind, s.score, standings[0]?.score ?? null)}%` }} />
               </div>
               {s.is_me && s.score !== null ? (
                 <span className="text-xs text-ink-muted">
-                  הושלמו {s.done} מתוך {Math.max(s.planned, 0)} בתוכנית שלך
+                  {c.kind === "weight_loss" ? `${s.done} שקילות בתחרות. נספר עד 1% בשבוע.` : `הושלמו ${s.done} מתוך ${Math.max(s.planned, 0)} בתוכנית שלך`}
                 </span>
               ) : null}
             </li>
@@ -107,6 +110,27 @@ async function CompetitionContent({ params }: { params: Promise<{ id: string }> 
         <LeaveButton id={c.id} />
       ) : null}
     </>
+  );
+}
+
+/** The first three (or everyone, when there are fewer), as faces with names, first place in the middle. */
+function Podium({ standings, kind }: { standings: CompetitionView["standings"]; kind: Kind }) {
+  const top = standings.slice(0, 3);
+  if (top.length < 2) return null;
+  const order = top.length === 3 ? [top[1], top[0], top[2]] : [top[0], top[1]];
+  return (
+    <div className="flex items-end justify-center gap-3 rounded-xl bg-field px-3 pt-4 pb-3" aria-label="שלושת הראשונים">
+      {order.map((p) => {
+        const first = p === top[0];
+        return (
+          <div key={p.member_key} className={`flex flex-col items-center ${first ? "-translate-y-2" : ""}`}>
+            {first ? <Crown aria-hidden="true" className="mb-0.5 size-5 text-ink" /> : null}
+            <FaceWithName seed={p.member_key} config={p.avatar} name={p.display_name} size={first ? 68 : 54} note={p.score === null ? undefined : scoreLabel(kind, p.score)} highlight={p.is_me} />
+            <span className={`mt-1 flex size-6 items-center justify-center rounded-full text-xs font-bold ${first ? "bg-accent" : "bg-surface"}`}>{p.rank ?? "–"}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

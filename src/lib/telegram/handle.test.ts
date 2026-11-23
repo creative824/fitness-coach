@@ -87,8 +87,21 @@ describe("telegram bot", () => {
     await handleUpdate(msg(4, "אכלתי סנדוויץ' עם טונה"));
     const call = calls.find((c) => c.rpc === "save_food_log_as");
     expect(call?.args[0]).toMatchObject({ p_user: "user-1", p_estimated: true });
-    expect(sent[0].text).toContain("300–420");
+    // Counted from the food database: no AI call, no quota used.
+    expect(calls.some((c) => c.rpc === "take_ai_quota_as")).toBe(false);
+    expect(sent[0].text).toContain("טונה");
     expect(sent[0].text).toContain("הערכה");
+  });
+
+  it("asks the AI only about words the food database does not know", async () => {
+    process.env.GEMINI_API_KEY = "test";
+    tables.telegram_links = [{ user_id: "user-1" }];
+    tables.profiles = [{ calorie_tracking: true, water_vessel_ml: 250 }];
+    rpcResult.save_food_log_as = "11111111-1111-4111-8111-111111111111";
+    await handleUpdate(msg(7, "אכלתי פרלין מיוחד"));
+    expect(calls.some((c) => c.rpc === "take_ai_quota_as")).toBe(true);
+    expect(sent[0].text).toContain("300–420");
+    delete process.env.GEMINI_API_KEY;
   });
 
   it("still saves the meal, without an estimate, over the daily AI limit", async () => {
@@ -96,7 +109,9 @@ describe("telegram bot", () => {
     tables.profiles = [{ calorie_tracking: true, water_vessel_ml: 250 }];
     rpcResult.take_ai_quota_as = false;
     rpcResult.save_food_log_as = "11111111-1111-4111-8111-111111111111";
-    await handleUpdate(msg(6, "אכלתי סנדוויץ' עם טונה"));
+    process.env.GEMINI_API_KEY = "test";
+    await handleUpdate(msg(6, "אכלתי פרלין מיוחד"));
+    delete process.env.GEMINI_API_KEY;
     const quota = calls.find((c) => c.rpc === "take_ai_quota_as");
     expect(quota?.args[0]).toMatchObject({ p_user: "user-1", p_kind: "food_estimate" });
     const call = calls.find((c) => c.rpc === "save_food_log_as");

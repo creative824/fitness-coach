@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { FOODS } from "@/content/menu-foods";
 import { MENU_MEALS } from "@/content/menu-meals";
-import { allowedFor, buildMenu, mealBySlug, optionPosition, renderMeal, reshuffle, slotKcal, swapSlot, tagsOf, type DietProfile } from "./engine";
+import { allowedFor, buildMenu, mealBySlug, optionPosition, renderMeal, reshuffle, slotKcal, slotLabels, swapSlot, tagsOf, upgradeMenu, type DayMenu, type DietProfile } from "./engine";
+import { choicesFor, chooseSlot, plannedKcal } from "./engine";
 
 const anyone: DietProfile = { pattern: "omnivore", allergies: [], avoid: [] };
 const total = (m: ReturnType<typeof buildMenu>) => m.slots.reduce((s, x) => s + slotKcal(x), 0);
@@ -34,7 +35,8 @@ describe("buildMenu", () => {
   });
 
   it("follows meals per day", () => {
-    expect(buildMenu({ target: 2000, mealsPerDay: 3, profile: anyone, seed: 1 }).slots.map((s) => s.type)).toEqual(["breakfast", "lunch", "dinner"]);
+    // Between-meal snacks are part of every day, also for "3 meals a day".
+    expect(buildMenu({ target: 2000, mealsPerDay: 3, profile: anyone, seed: 1 }).slots.map((s) => s.type)).toEqual(["breakfast", "snack", "lunch", "snack", "dinner"]);
     expect(buildMenu({ target: 2000, mealsPerDay: 6, profile: anyone, seed: 1 }).slots).toHaveLength(6);
   });
 
@@ -94,5 +96,69 @@ describe("swap", () => {
     const r = reshuffle(m, { target: 2000, mealsPerDay: 5, profile: anyone }, 99);
     expect(r.slots[0]).toEqual(m.slots[0]);
     expect(Math.abs(total(r) - 2000)).toBeLessThanOrEqual(80);
+  });
+});
+
+describe("snacks and upgrades", () => {
+  it("names snacks by the meal before them", () => {
+    expect(slotLabels(["breakfast", "snack", "lunch", "snack", "dinner", "snack"])).toEqual([
+      "ארוחת בוקר",
+      "ארוחת ביניים · בוקר",
+      "ארוחת צהריים",
+      "ארוחת ביניים · אחה״צ",
+      "ארוחת ערב",
+      "ארוחת ביניים · ערב",
+    ]);
+  });
+
+  it("rebuilds a 3-meal menu with snacks and keeps what was eaten", () => {
+    const old: DayMenu = {
+      v: 1,
+      target: 1800,
+      seed: 7,
+      slots: [
+        { type: "breakfast", kcal: 540, meal: "omelette-bread", eaten: { logId: "a" } },
+        { type: "lunch", kcal: 720, meal: buildMenu({ target: 1800, mealsPerDay: 5, profile: anyone, seed: 3 }).slots[2].meal },
+        { type: "dinner", kcal: 540, meal: buildMenu({ target: 1800, mealsPerDay: 5, profile: anyone, seed: 3 }).slots[4].meal },
+      ],
+    };
+    const up = upgradeMenu(old, { target: 1800, mealsPerDay: 3, profile: anyone });
+    expect(up.v).toBe(2);
+    expect(up.slots.map((s) => s.type)).toEqual(["breakfast", "snack", "lunch", "snack", "dinner"]);
+    expect(up.slots[0]).toEqual(old.slots[0]);
+    const total = up.slots.reduce((a, s) => a + slotKcal(s), 0);
+    expect(Math.abs(total - 1800)).toBeLessThan(90);
+    // Already current: returned as is.
+    expect(upgradeMenu(up, { target: 1800, mealsPerDay: 3, profile: anyone })).toBe(up);
+  });
+});
+
+describe("choices and hand-set calories", () => {
+  const anyone = { pattern: null, allergies: [], avoid: [] };
+  it("offers at least 20 meals for every kind of slot", () => {
+    const m = buildMenu({ target: 1800, mealsPerDay: 5, profile: anyone, seed: 3 });
+    for (let i = 0; i < m.slots.length; i++) expect(choicesFor(m, i, anyone).length, m.slots[i].type).toBeGreaterThanOrEqual(20);
+  });
+  it("puts a chosen meal in the slot at the same calories", () => {
+    const m = buildMenu({ target: 1800, mealsPerDay: 5, profile: anyone, seed: 3 });
+    const pick = choicesFor(m, 0, anyone).find((c) => c.slug !== m.slots[0].meal)!;
+    const next = chooseSlot(m, 0, pick.slug, anyone);
+    expect(next.slots[0].meal).toBe(pick.slug);
+    expect(next.slots[0].kcal).toBe(m.slots[0].kcal);
+    expect(chooseSlot(m, 0, "chicken-rice", { ...anyone, pattern: "vegan" })).toBe(m);
+  });
+  it("keeps a hand-set slot and shares the rest of the target", () => {
+    const plan = plannedKcal(1800, 5, [250, null, null, null, null]);
+    expect(plan[0]).toBe(250);
+    expect(plan.reduce((a, b) => a + b, 0)).toBeCloseTo(1800, -1);
+    const m = buildMenu({ target: 1800, mealsPerDay: 5, profile: anyone, seed: 5, custom: [250, null, null, null, null] });
+    expect(m.slots[0].kcal).toBe(250);
+    expect(m.custom).toEqual([250, null, null, null, null]);
+    expect(Math.abs(total(m) - 1800)).toBeLessThanOrEqual(80);
+  });
+  it("offers light breakfasts first for a light morning", () => {
+    const m = buildMenu({ target: 1800, mealsPerDay: 5, profile: anyone, seed: 9, custom: [250, null, null, null, null] });
+    const top = choicesFor(m, 0, anyone).slice(0, 5);
+    expect(top.filter((c) => c.light).length).toBeGreaterThanOrEqual(3);
   });
 });

@@ -83,6 +83,8 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
   const logged = past.filter((d) => d.kcal);
   const avg = logged.length ? Math.round(logged.reduce((a, d) => a + (d.kcal ?? 0), 0) / logged.length) : null;
   const onTarget = logged.filter((d) => tone(d.kcal, target) === "on").length;
+  // Days with food logged, against the target: the deficit (or surplus) that moves the scale.
+  const balance = target ? logged.reduce((a, d) => a + (d.kcal ?? 0) - target, 0) : 0;
   const wDone = days.filter((d) => d.workout === "done" || d.workout === "partial").length;
   const wPlanned = days.filter((d) => d.workout).length;
   const activeMin = days.reduce((a, d) => a + d.activeMin, 0);
@@ -109,7 +111,8 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
       {range === "day" ? (
         <Card className="flex flex-col gap-4">
           {target ? (
-            <div className="flex items-center gap-4 rounded-xl bg-night p-4 text-white">
+            <div className="flex flex-col gap-2 rounded-xl bg-night p-4 text-white">
+            <div className="flex items-center gap-4">
               <CalorieRing eaten={mid(foodDay?.totals.kcal) ?? 0} target={target} size={112} />
               <dl className="grid flex-1 grid-cols-3 gap-2 text-center">
                 {(
@@ -126,6 +129,18 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
                   </div>
                 ))}
               </dl>
+            </div>
+            <p className="text-sm text-white/80">
+              {(mid(foodDay?.totals.kcal) ?? 0) <= target ? (
+                <>
+                  נשארו <span className="num font-semibold text-accent">{(target - (mid(foodDay?.totals.kcal) ?? 0)).toLocaleString("he-IL")}</span> קל׳ להיום.
+                </>
+              ) : (
+                <>
+                  <span className="num font-semibold text-coral">{((mid(foodDay?.totals.kcal) ?? 0) - target).toLocaleString("he-IL")}</span> קל׳ מעל היעד היום.
+                </>
+              )}
+            </p>
             </div>
           ) : null}
           <div className="flex items-center justify-between">
@@ -157,6 +172,24 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
           </dl>
 
           {range === "week" ? <WeekBars days={days} target={target} today={today} /> : <MonthGrid days={days} target={target} today={today} />}
+
+          {target && logged.length ? (
+            <p className={`rounded-xl px-3 py-2 text-sm ${balance <= 0 ? "bg-accent-soft" : "bg-coral-soft"}`}>
+              מאזן מול היעד ב-<span className="num">{logged.length}</span> הימים שנרשמו:{" "}
+              <span className="num font-semibold" dir="ltr">
+                {balance > 0 ? "+" : balance < 0 ? "−" : ""}
+                {Math.abs(balance).toLocaleString("he-IL")}
+              </span>{" "}
+              קל׳
+              {Math.abs(balance) >= 770 ? (
+                <>
+                  {" "}
+                  (בערך <span className="num">{(Math.abs(balance) / 7700).toFixed(1)}</span> ק״ג {balance < 0 ? "פחות" : "יותר"})
+                </>
+              ) : null}
+              .
+            </p>
+          ) : null}
 
           <p className="text-xs text-ink-muted">
             {target ? (

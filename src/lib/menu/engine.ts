@@ -21,17 +21,39 @@ export const SLOT_LABEL: Record<SlotType, string> = {
   dinner: "ארוחת ערב",
 };
 
-/** Slots and calorie shares (percent) by meals per day. Fewer than 3 meals still gets 3. */
+/**
+ * Slots and calorie shares (percent). Every day has the three meals and two between-meal
+ * snacks (morning and afternoon); six meals a day adds an evening snack. Breakfast is the
+ * lighter meal; the user can set any slot's calories by hand (`custom`).
+ */
 const LAYOUTS: Record<number, [SlotType, number][]> = {
-  3: [["breakfast", 30], ["lunch", 40], ["dinner", 30]],
-  4: [["breakfast", 25], ["snack", 10], ["lunch", 35], ["dinner", 30]],
-  5: [["breakfast", 25], ["snack", 10], ["lunch", 30], ["snack", 10], ["dinner", 25]],
+  5: [["breakfast", 20], ["snack", 10], ["lunch", 35], ["snack", 10], ["dinner", 25]],
   6: [["breakfast", 20], ["snack", 10], ["lunch", 30], ["snack", 10], ["dinner", 20], ["snack", 10]],
 };
 
 export function layoutFor(mealsPerDay: number | null | undefined): [SlotType, number][] {
-  const n = Math.min(6, Math.max(3, mealsPerDay ?? 5));
-  return LAYOUTS[n];
+  return LAYOUTS[(mealsPerDay ?? 5) >= 6 ? 6 : 5];
+}
+
+/** "ארוחת ביניים · בוקר" etc.: a snack is named by the meal before it. */
+export function slotLabels(types: SlotType[]): string[] {
+  return types.map((t, i) => {
+    if (t !== "snack") return SLOT_LABEL[t];
+    const before = types.slice(0, i).reverse().find((x) => x !== "snack");
+    const when = before === "breakfast" ? "בוקר" : before === "lunch" ? "אחה״צ" : before === "dinner" ? "ערב" : null;
+    return when ? `ארוחת ביניים · ${when}` : SLOT_LABEL.snack;
+  });
+}
+
+/** Matches the slots of an older menu to a layout by kind and order, so eaten meals stay put. */
+export function alignToLayout(old: MenuSlot[], layout: [SlotType, number][]): (MenuSlot | undefined)[] {
+  const used = new Set<number>();
+  return layout.map(([type]) => {
+    const k = old.findIndex((s, i) => !used.has(i) && s.type === type);
+    if (k < 0) return undefined;
+    used.add(k);
+    return old[k];
+  });
 }
 
 export interface DietProfile {
@@ -57,10 +79,13 @@ export interface MenuSlot {
 }
 
 export interface DayMenu {
-  v: 1;
+  /** 2: the layout with between-meal snacks. Menus saved as 1 are rebuilt around what was eaten. */
+  v: 1 | 2;
   target: number;
   seed: number;
   slots: MenuSlot[];
+  /** Calories the user set by hand for some slots (by position in the layout), null for the rest. */
+  custom?: (number | null)[];
 }
 
 // ───────────────────────── diet filter ─────────────────────────
@@ -110,6 +135,12 @@ export function scaleFor(meal: MenuMeal, target: number): number {
 const fits = (meal: MenuMeal, target: number) => {
   const s = scaleFor(meal, target);
   return s >= MIN_SCALE && s <= MAX_SCALE;
+};
+
+/** Portions close to how the meal is written: a light slot gets light meals first, not shrunk big ones. */
+const natural = (meal: MenuMeal, target: number) => {
+  const s = scaleFor(meal, target);
+  return s >= 0.7 && s <= 1.45;
 };
 
 export interface RenderedItem {
@@ -253,10 +284,60 @@ export function optionsFor(type: SlotType, kcal: number, index: number, seed: nu
   const ok = allowedFor(profile);
   const own = MENU_MEALS.filter((m) => m.slots.includes(type) && ok(m));
   let list = own.filter((m) => fits(m, kcal));
-  // Unusual targets or strict diets: fall back to the closest meals of the slot, then to any slot.
-  if (!list.length) list = own;
-  if (!list.length) list = MENU_MEALS.filter(ok);
-  return shuffled(list, seed * 31 + index * 7919);
+  if (!own.length) list = MENU_MEALS.filter(ok);
+  const order = shuffled(list, seed * 31 + index * 7919);
+  const out = [...order.filter((m) => natural(m, kcal)), ...order.filter((m) => !natural(m, kcal))];
+  // Unusual targets or strict diets: add the closest of the slot's other meals, so there is
+  // always something new to swap to.
+  if (out.length < 4) {
+    const gap = (m: MenuMeal) => Math.abs(Math.log(Math.max(0.01, scaleFor(m, kcal))));
+    out.push(...own.filter((m) => !out.includes(m)).sort((x, y) => gap(x) - gap(y)));
+  }
+  return out;
+}
+
+export interface MealChoice {
+  slug: string;
+  title: string;
+  kcal: number;
+  protein: number;
+  light: boolean;
+  /** Short preview of the portions: "2 ביצים · 2 פרוסות לחם מלא". */
+  portions: string;
+}
+
+/**
+ * Every meal of the slot's kind that suits the diet, scaled to the slot's calories, for the
+ * "all options" list. The ones that fit the calories come first, closest to their written portions.
+ */
+export function choicesFor(menu: DayMenu, index: number, profile: DietProfile): MealChoice[] {
+  const slot = menu.slots[index];
+  if (!slot) return [];
+  const ok = allowedFor(profile);
+  const first = optionsFor(slot.type, slot.kcal, index, menu.seed, profile);
+  const rest = MENU_MEALS.filter((m) => m.slots.includes(slot.type) && ok(m) && !first.includes(m));
+  // Closest to the portions as written first: a light slot lists the light meals at the top.
+  const gap = (m: MenuMeal) => Math.abs(Math.log(Math.max(0.01, scaleFor(m, slot.kcal))));
+  const fitting = first.filter((m) => fits(m, slot.kcal)).sort((x, y) => gap(x) - gap(y));
+  return [...fitting, ...first.filter((m) => !fitting.includes(m)), ...rest].map((m) => {
+    const r = renderMeal(m, slot.kcal);
+    return {
+      slug: m.slug,
+      title: m.title,
+      kcal: r.kcal,
+      protein: r.protein,
+      light: Boolean(m.light),
+      portions: r.items.map((x) => `${x.amount} ${x.name}`).join(" · "),
+    };
+  });
+}
+
+/** Puts a chosen meal in a slot, at the slot's calories. */
+export function chooseSlot(menu: DayMenu, index: number, slug: string, profile: DietProfile): DayMenu {
+  const slot = menu.slots[index];
+  const meal = mealBySlug(slug);
+  if (!slot || slot.eaten || !meal || !meal.slots.includes(slot.type) || !allowedFor(profile)(meal)) return menu;
+  return { ...menu, slots: menu.slots.map((s, i) => (i === index ? { ...s, meal: slug } : s)) };
 }
 
 export interface BuildInput {
@@ -265,12 +346,32 @@ export interface BuildInput {
   profile: DietProfile;
   seed: number;
   /** Slots of an earlier version of the day. Eaten ones are kept as they are. */
-  keep?: MenuSlot[];
+  keep?: (MenuSlot | undefined)[];
+  /** Calories set by hand per slot of the layout (null: by the usual share). */
+  custom?: (number | null)[] | null;
 }
 
-export function buildMenu({ target, mealsPerDay, profile, seed, keep = [] }: BuildInput): DayMenu {
+/** Hand-set calories that match the layout, or null. Values are kept within 80–1500. */
+export function customFor(custom: (number | null)[] | null | undefined, mealsPerDay: number | null): (number | null)[] | null {
+  const n = layoutFor(mealsPerDay).length;
+  if (!custom || custom.length !== n || custom.every((x) => x === null)) return null;
+  return custom.map((x) => (typeof x === "number" && Number.isFinite(x) ? Math.min(1500, Math.max(80, Math.round(x / 10) * 10)) : null));
+}
+
+/** Planned calories per slot: hand-set ones as set, the rest share what is left of the target. */
+export function plannedKcal(target: number, mealsPerDay: number | null, custom?: (number | null)[] | null): number[] {
   const layout = layoutFor(mealsPerDay);
-  const shareTotal = layout.reduce((s, [, x]) => s + x, 0);
+  const c = customFor(custom, mealsPerDay);
+  const fixed = c ? c.reduce<number>((a, x) => a + (x ?? 0), 0) : 0;
+  const shareLeft = layout.reduce((a, [, x], i) => a + (c?.[i] != null ? 0 : x), 0);
+  const left = Math.max(0, target - fixed);
+  return layout.map(([, share], i) => (c?.[i] != null ? c[i]! : shareLeft ? Math.max(80, Math.round((left * share) / shareLeft)) : 80));
+}
+
+export function buildMenu({ target, mealsPerDay, profile, seed, keep = [], custom }: BuildInput): DayMenu {
+  const layout = layoutFor(mealsPerDay);
+  const hand = customFor(custom, mealsPerDay);
+  const plan = plannedKcal(target, mealsPerDay, hand);
   // A meal, or its main food (the first part), appears once a day.
   const used = new Set<string>();
   const use = (slug: string) => {
@@ -279,26 +380,29 @@ export function buildMenu({ target, mealsPerDay, profile, seed, keep = [] }: Bui
     if (main) used.add(`food:${main}`);
   };
   const isUsed = (m: MenuMeal) => used.has(m.slug) || used.has(`food:${m.parts[0]?.food}`);
-  keep.forEach((k) => k.eaten && use(k.meal));
+  keep.forEach((k) => k?.eaten && use(k.meal));
 
   let carry = 0;
-  const slots: MenuSlot[] = layout.map(([type, share], i) => {
+  const slots: MenuSlot[] = layout.map(([type], i) => {
     const kept = keep[i];
-    const planned = Math.round((target * share) / shareTotal);
+    const planned = plan[i];
     if (kept?.eaten && kept.type === type) {
       carry += planned - slotKcal(kept);
       return kept;
     }
-    const kcal = Math.max(80, planned + carry);
+    // A hand-set slot keeps its number; rounding is carried to the next free slot.
+    const kcal = hand?.[i] != null ? planned : Math.max(80, planned + carry);
     const options = optionsFor(type, kcal, i, seed, profile);
     const meal = options.find((m) => !isUsed(m)) ?? options.find((m) => !used.has(m.slug)) ?? options[0];
     if (!meal) return { type, kcal, meal: "" };
     use(meal.slug);
     const actual = renderMeal(meal, kcal).kcal;
-    carry = kcal - actual;
+    carry = (hand?.[i] != null ? carry : 0) + kcal - actual;
     return { type, kcal, meal: meal.slug, eaten: null };
   });
-  return { v: 1, target, seed, slots: slots.filter((s) => s.meal) };
+  const out: DayMenu = { v: 2, target, seed, slots: slots.filter((s) => s.meal) };
+  if (hand) out.custom = hand;
+  return out;
 }
 
 /** The next option for one slot, at the same calories. Meals used elsewhere today are skipped. */
@@ -327,7 +431,17 @@ export function optionPosition(menu: DayMenu, index: number, profile: DietProfil
 
 /** A new menu for the day, keeping what was already eaten. */
 export function reshuffle(menu: DayMenu, input: Omit<BuildInput, "seed" | "keep">, seed: number): DayMenu {
-  return buildMenu({ ...input, seed, keep: menu.slots });
+  return buildMenu({ ...input, seed, keep: alignToLayout(menu.slots, layoutFor(input.mealsPerDay)) });
+}
+
+/**
+ * A menu saved before snacks were part of every day, or for an older calorie target, rebuilt
+ * around the meals already eaten.
+ */
+export function upgradeMenu(menu: DayMenu, input: Omit<BuildInput, "seed" | "keep">): DayMenu {
+  const same = JSON.stringify(menu.custom ?? null) === JSON.stringify(customFor(input.custom, input.mealsPerDay));
+  if (menu.v === 2 && same && menu.target === input.target && menu.slots.length === layoutFor(input.mealsPerDay).length) return menu;
+  return reshuffle(menu, input, menu.seed);
 }
 
 export function seedFrom(text: string): number {

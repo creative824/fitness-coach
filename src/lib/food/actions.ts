@@ -6,12 +6,16 @@ import { requireUser } from "@/lib/data/user";
 import { createClient } from "@/lib/supabase/server";
 import { localDay } from "@/lib/water/time";
 import { estimateMeal, type EstimateResult } from "./estimate";
+import { estimateText } from "./estimate-text";
 import { DAILY_ESTIMATE_LIMIT } from "./limits";
 import { saveFoodSchema } from "./items";
 
 const text = z.string().trim().min(2).max(1000);
 
-/** AI estimate of a meal's items. Nothing is saved until the user confirms or keeps a draft. */
+/**
+ * AI estimate for words the food database does not know (the app counts the rest itself, see
+ * parse.ts). Nothing is saved until the user saves the meal.
+ */
 export async function analyzeFood(input: string): Promise<EstimateResult> {
   const parsed = text.safeParse(input);
   if (!parsed.success) return { ok: false, reason: "failed" };
@@ -32,8 +36,10 @@ export async function saveFoodLog(input: z.input<typeof saveFoodSchema>): Promis
   const { data: profile } = await supabase.from("profiles").select("calorie_tracking").eq("user_id", user.id).maybeSingle();
   const tracking = profile?.calorie_tracking !== false;
   const d = parsed.data;
+  // Nothing counted in the browser (e.g. an old page): count it here from the food database.
+  const counted = d.items.length || !tracking ? d.items : (await estimateText(d.text, async () => false)).items;
   // With calorie tracking off, only what was eaten is kept, without numbers.
-  const items = d.items.map((i) =>
+  const items = counted.map((i) =>
     tracking ? i : { ...i, kcal_min: null, kcal_max: null, protein_g: null, carbs_g: null, fat_g: null, confidence: null },
   );
   const { data, error } = await supabase.rpc("save_food_log", {
@@ -43,7 +49,7 @@ export async function saveFoodLog(input: z.input<typeof saveFoodSchema>): Promis
     p_status: d.status,
     p_source: "web",
     p_client_ref: d.clientRef,
-    p_estimated: d.estimated && tracking,
+    p_estimated: (d.estimated || counted !== d.items) && tracking,
     p_items: items,
   });
   if (error) {

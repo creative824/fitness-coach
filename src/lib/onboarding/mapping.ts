@@ -2,6 +2,7 @@
  * Pure mapping between the onboarding draft and the database rows (profiles, goals,
  * food_preferences, exercise_preferences). Kept free of I/O so it can be unit tested.
  */
+import { parseAvatar } from "@/lib/avatar";
 import { screenSafety, type SafetyResult } from "@/lib/safety/screen";
 import { emptyDraft, SAFETY_QUESTIONS, type OnboardingDraft, type SafetyQuestion } from "./schema";
 
@@ -17,7 +18,7 @@ export interface ProfileRow {
   water_cups_now: number | null;
   busy_days: number[];
   /** Small optional answers that have no column of their own. */
-  preferences?: { sex?: string | null };
+  preferences?: { sex?: string | null; avatar?: unknown };
   safety_flags: { answers?: Partial<Record<SafetyQuestion, boolean | null>>; result?: SafetyResult; evaluated_at?: string };
   onboarding_step: number;
   onboarding_completed_at?: string | null;
@@ -72,7 +73,7 @@ export function draftToRows(userId: string, d: OnboardingDraft, step: number, no
     sleep_hours: d.sleep_hours,
     water_cups_now: d.water_cups_now,
     busy_days: d.busy_days,
-    preferences: { sex: d.sex },
+    preferences: { sex: d.sex, ...(d.avatar ? { avatar: d.avatar } : {}) },
     safety_flags: { answers: d.answers, result: safety, evaluated_at: now.toISOString() },
     onboarding_step: step,
   };
@@ -122,6 +123,7 @@ export function rowsToDraft(
     d.busy_days = p.busy_days ?? [];
     const sex = p.preferences?.sex;
     d.sex = sex === "male" || sex === "female" ? sex : null;
+    d.avatar = parseAvatar(p.preferences?.avatar);
     const answers = p.safety_flags?.answers ?? {};
     for (const q of SAFETY_QUESTIONS) d.answers[q] = answers[q] ?? null;
   }

@@ -19,7 +19,7 @@ const createSchema = z.object({
   nickname,
 });
 
-export type CreateResult = { ok: true; id: string; code: string } | { ok: false; reason: "invalid" | "limit" | "failed" };
+export type CreateResult = { ok: true; id: string; code: string } | { ok: false; reason: "invalid" | "limit" | "unsuitable" | "failed" };
 
 /** Creates a competition. The invite code is returned once; only its hash is stored. */
 export async function createCompetition(input: z.input<typeof createSchema>): Promise<CreateResult> {
@@ -43,7 +43,7 @@ export async function createCompetition(input: z.input<typeof createSchema>): Pr
     console.error("create_leaderboard failed", error?.message);
     return {
       ok: false,
-      reason: error?.message.includes("too many") ? "limit" : "failed",
+      reason: error?.message.includes("too many") ? "limit" : error?.message.includes("not suitable") ? "unsuitable" : "failed",
     };
   }
   revalidatePath("/competitions");
@@ -54,7 +54,7 @@ export type JoinResult =
   | { ok: true; id: string }
   | {
       ok: false;
-      reason: "invalid" | "wrong_code" | "full" | "over" | "removed" | "limit" | "failed";
+      reason: "invalid" | "wrong_code" | "full" | "over" | "removed" | "limit" | "unsuitable" | "failed";
     };
 
 export async function joinCompetition(input: { code: string; nickname: string }): Promise<JoinResult> {
@@ -77,7 +77,9 @@ export async function joinCompetition(input: { code: string; nickname: string })
           ? "removed"
           : m.includes("too many")
             ? "limit"
-            : "failed";
+            : m.includes("not suitable")
+              ? "unsuitable"
+              : "failed";
     if (reason === "failed") console.error("join_leaderboard failed", m);
     return { ok: false, reason };
   }

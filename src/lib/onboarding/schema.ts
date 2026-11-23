@@ -2,6 +2,7 @@
  * Onboarding questionnaire data (spec §6). One shape for the whole form; each step validates
  * only its own fields so partial drafts can be autosaved.
  */
+import { avatarSchema, type AvatarConfig } from "@/lib/avatar";
 import { z } from "zod";
 
 export const GOAL_TYPES = [
@@ -114,6 +115,8 @@ export interface OnboardingDraft {
   sleep_hours: number | null;
   water_cups_now: number | null;
   busy_days: number[];
+  /** The illustrated face chosen at signup, or null to use the one from the account id. */
+  avatar: AvatarConfig | null;
 }
 
 export const emptyDraft = (): OnboardingDraft => ({
@@ -142,6 +145,7 @@ export const emptyDraft = (): OnboardingDraft => ({
   sleep_hours: 7,
   water_cups_now: null,
   busy_days: [],
+  avatar: null,
 });
 
 /** Loose schema for autosave: accepts any partial draft but still bounds every value. */
@@ -152,6 +156,7 @@ export const draftSchema = z.object({
   weight_kg: z.number().min(20).max(400).nullable(),
   target_weight_kg: z.number().min(20).max(400).nullable(),
   sex: z.enum(SEXES).nullable().default(null),
+  avatar: avatarSchema.nullable().default(null),
   goals: z.array(z.enum(GOAL_TYPES)).max(3),
   dietary_pattern: z.enum(DIETARY_PATTERNS).nullable(),
   allergies: z.array(z.enum(ALLERGENS)),
