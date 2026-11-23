@@ -9,11 +9,11 @@ import { estimateText } from "@/lib/food/estimate-text";
 import { foodItemSchema, totalsOf } from "@/lib/food/items";
 import { createClient } from "@/lib/supabase/server";
 import { localDay } from "@/lib/water/time";
-import { renderSlot, reshuffle, swapSlot, type DayMenu, type SlotType } from "./engine";
+import { chooseSlot, customFor, layoutFor, renderSlot, reshuffle, swapSlot, type DayMenu, type SlotType } from "./engine";
 import { loadDayLog } from "./data";
 import { toView, type MenuView } from "./view";
 
-export type MenuResult = { ok: true; menu: MenuView; eatenKcal: number } | { ok: false };
+export type MenuResult = { ok: true; menu: MenuView; eatenKcal: number; eatenProtein: number } | { ok: false };
 
 const FOOD_MEAL: Record<SlotType, "breakfast" | "lunch" | "dinner" | "snack"> = {
   breakfast: "breakfast",
@@ -36,14 +36,15 @@ async function withMenu(change: (menu: DayMenu, ctx: Awaited<ReturnType<typeof l
     console.error("menu save failed", error.message);
     return { ok: false };
   }
-  return { ok: true, menu: toView(next, ctx.profile), eatenKcal: await eatenToday(user.id, date) };
+  const eaten = await eatenToday(user.id, date);
+  return { ok: true, menu: toView(next, ctx.profile), eatenKcal: eaten.kcal, eatenProtein: eaten.protein };
 }
 
-/** Calories of today's confirmed food logs, middle of each range (meals saved without numbers are counted from their text). */
-async function eatenToday(userId: string, date: string): Promise<number> {
+/** Calories (middle of each range) and protein of today's confirmed food logs (meals saved without numbers are counted from their text). */
+async function eatenToday(userId: string, date: string): Promise<{ kcal: number; protein: number }> {
   const day = await loadFoodDay(userId, date).catch(() => null);
   const k = day?.totals.kcal;
-  return k ? Math.round((k[0] + k[1]) / 2) : 0;
+  return { kcal: k ? Math.round((k[0] + k[1]) / 2) : 0, protein: day?.totals.protein ?? 0 };
 }
 
 const index = z.int().min(0).max(7);
@@ -53,9 +54,42 @@ export async function swapMeal(i: number): Promise<MenuResult> {
   return withMenu(async (menu, ctx) => swapSlot(menu, i, ctx.profile));
 }
 
+/** Puts a meal picked from the full list in a slot. */
+export async function chooseMeal(i: number, slug: string): Promise<MenuResult> {
+  if (!index.safeParse(i).success || typeof slug !== "string" || slug.length > 60) return { ok: false };
+  return withMenu(async (menu, ctx) => chooseSlot(menu, i, slug, ctx.profile));
+}
+
+/**
+ * Sets roughly how many calories a meal of the day should have (null: back to the usual share).
+ * Kept in the profile, so every next day follows it; today's menu is rebuilt around it, keeping
+ * what was already eaten. The other meals share what is left of the daily target.
+ */
+export async function setSlotKcal(i: number, kcal: number | null): Promise<MenuResult> {
+  if (!index.safeParse(i).success || (kcal !== null && !(Number.isFinite(kcal) && kcal >= 80 && kcal <= 1500))) return { ok: false };
+  const user = await requireUser();
+  const ctx = await loadDayContext(user.id);
+  const n = layoutFor(ctx.mealsPerDay).length;
+  if (i >= n) return { ok: false };
+  const list: (number | null)[] = Array.from({ length: n }, (_, k) => (ctx.slotKcal?.length === n ? (ctx.slotKcal[k] ?? null) : null));
+  list[i] = kcal;
+  // At least one meal keeps the usual share, so the day still adds up to the target.
+  if (list.every((x) => x !== null)) return { ok: false };
+  const custom = customFor(list, ctx.mealsPerDay);
+  const supabase = await createClient();
+  const { data: row } = await supabase.from("profiles").select("preferences").eq("user_id", user.id).maybeSingle();
+  const preferences = { ...((row?.preferences as Record<string, unknown> | null) ?? {}), slot_kcal: custom };
+  const { error } = await supabase.from("profiles").update({ preferences }).eq("user_id", user.id);
+  if (error) {
+    console.error("slot kcal save failed", error.message);
+    return { ok: false };
+  }
+  return withMenu(async (menu) => reshuffle(menu, { target: menu.target, mealsPerDay: ctx.mealsPerDay, profile: ctx.profile, custom }, menu.seed));
+}
+
 export async function swapWholeMenu(): Promise<MenuResult> {
   return withMenu(async (menu, ctx) =>
-    reshuffle(menu, { target: menu.target, mealsPerDay: ctx.mealsPerDay, profile: ctx.profile }, Math.floor(Math.random() * 2 ** 31)),
+    reshuffle(menu, { target: menu.target, mealsPerDay: ctx.mealsPerDay, profile: ctx.profile, custom: ctx.slotKcal }, Math.floor(Math.random() * 2 ** 31)),
   );
 }
 

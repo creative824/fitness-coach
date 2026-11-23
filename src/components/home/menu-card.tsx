@@ -1,10 +1,10 @@
 "use client";
 
-import { Check, ChevronDown, Loader2, Pencil, RefreshCw, Shuffle, X } from "lucide-react";
+import { Check, ChevronDown, Feather, List, Loader2, Minus, Pencil, Plus, RefreshCw, Shuffle, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 import { FoodEntry, useFoodEntry } from "@/components/food/food-entry";
-import { logOtherFood, setMealEaten, swapMeal, swapWholeMenu, type MenuResult } from "@/lib/menu/actions";
+import { chooseMeal, logOtherFood, setMealEaten, setSlotKcal, swapMeal, swapWholeMenu, type MenuResult } from "@/lib/menu/actions";
 import type { MenuView, SlotView } from "@/lib/menu/view";
 import { fmt, useDay } from "./day-context";
 
@@ -26,9 +26,11 @@ export interface MenuApi {
   swap: (index: number) => Promise<MenuResult>;
   swapAll: () => Promise<MenuResult>;
   other: (input: Parameters<typeof logOtherFood>[0]) => Promise<MenuResult>;
+  choose: (index: number, slug: string) => Promise<MenuResult>;
+  setKcal: (index: number, kcal: number | null) => Promise<MenuResult>;
 }
 
-const SERVER_API: MenuApi = { eat: setMealEaten, swap: swapMeal, swapAll: swapWholeMenu, other: logOtherFood };
+const SERVER_API: MenuApi = { eat: setMealEaten, swap: swapMeal, swapAll: swapWholeMenu, other: logOtherFood, choose: chooseMeal, setKcal: setSlotKcal };
 
 export function MenuCard({
   initial,
@@ -43,7 +45,7 @@ export function MenuCard({
   aiEnabled: boolean;
   api?: MenuApi;
 }) {
-  const { setEatenKcal } = useDay();
+  const { setEatenKcal, setEatenProtein } = useDay();
   const [menu, setMenu] = useState(initial);
   const [open, setOpen] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -62,6 +64,7 @@ export function MenuCard({
       if (r.ok) {
         setMenu(r.menu);
         setEatenKcal(r.eatenKcal);
+        setEatenProtein(r.eatenProtein);
       } else {
         setMenu(prev);
         setError(true);
@@ -126,6 +129,9 @@ export function MenuCard({
               }))
             }
             onSwap={() => apply(`swap:${s.index}`, () => api.swap(s.index))}
+            onChoose={(slug) => apply(`swap:${s.index}`, () => api.choose(s.index, slug))}
+            onKcal={(kcal) => apply(`kcal:${s.index}`, () => api.setKcal(s.index, kcal))}
+            canFixKcal={menu.slots.filter((x) => x.custom).length < menu.slots.length - 1 || s.custom}
           />
         ))}
       </ul>
@@ -148,6 +154,7 @@ export function MenuCard({
             onSaved={(r) => {
               setMenu(r.menu);
               setEatenKcal(r.eatenKcal);
+              setEatenProtein(r.eatenProtein);
               setOther(false);
             }}
           />
@@ -180,6 +187,9 @@ function MealRow({
   busy,
   onEat,
   onSwap,
+  onChoose,
+  onKcal,
+  canFixKcal,
 }: {
   slot: SlotView;
   open: boolean;
@@ -189,7 +199,11 @@ function MealRow({
   busy: string | null;
   onEat: () => void;
   onSwap: () => void;
+  onChoose: (slug: string) => void;
+  onKcal: (kcal: number | null) => void;
+  canFixKcal: boolean;
 }) {
+  const [tool, setTool] = useState<"list" | "kcal" | null>(null);
   const panel = `meal-${s.index}`;
   const swapping = busy === `swap:${s.index}`;
   const title = s.instead ? s.instead.text : (s.meal?.title ?? "");
@@ -214,6 +228,8 @@ function MealRow({
               <span className={`size-1.5 rounded-full ${SLOT_DOT[s.type]}`} aria-hidden="true" />
               {s.label}
               {s.instead ? <span className="rounded-full bg-field px-1.5 text-[10px]">אכלתי משהו אחר</span> : null}
+              {s.light && !s.instead ? <span className="rounded-full bg-accent-soft px-1.5 text-[10px] text-ink">קליל</span> : null}
+              {s.custom && showNumbers ? <span className="rounded-full bg-sky-soft px-1.5 text-[10px] text-ink">כ-{s.planned} קל׳ לפי בחירתך</span> : null}
             </span>
             <span className={`truncate text-[15px] leading-snug font-medium ${s.eaten ? "text-ink-muted" : ""}`}>{title}</span>
             {s.meal && !s.instead && !open ? (
@@ -275,6 +291,32 @@ function MealRow({
               </span>
             ) : null}
           </div>
+          {saved && !s.eaten ? (
+            <div className="flex flex-wrap gap-1.5 border-t border-line pt-2">
+              <button
+                type="button"
+                onClick={() => setTool(tool === "list" ? null : "list")}
+                aria-expanded={tool === "list"}
+                className={`inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors ${tool === "list" ? "bg-brand text-white" : "bg-surface hover:bg-line/60"}`}
+              >
+                <List aria-hidden="true" className="size-4" />
+                כל האפשרויות ({s.choices.length})
+              </button>
+              {showNumbers && (canFixKcal || s.custom) ? (
+                <button
+                  type="button"
+                  onClick={() => setTool(tool === "kcal" ? null : "kcal")}
+                  aria-expanded={tool === "kcal"}
+                  className={`inline-flex min-h-9 cursor-pointer items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors ${tool === "kcal" ? "bg-brand text-white" : "bg-surface hover:bg-line/60"}`}
+                >
+                  <SlidersHorizontal aria-hidden="true" className="size-4" />
+                  כמה קלוריות לארוחה
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {tool === "list" ? <ChoiceList slot={s} showNumbers={showNumbers} busy={busy !== null} onChoose={(slug) => { setTool(null); onChoose(slug); }} /> : null}
+          {tool === "kcal" ? <KcalEditor slot={s} busy={busy !== null} onSave={(k) => { setTool(null); onKcal(k); }} /> : null}
         </div>
       ) : null}
       {open && s.instead ? (
@@ -388,6 +430,121 @@ function OtherFood({
           "הוספה ליומן"
         )}
       </button>
+    </div>
+  );
+}
+
+/** Every meal that can go in the slot, at the slot's calories: tap one to put it in the menu. */
+function ChoiceList({ slot, showNumbers, busy, onChoose }: { slot: SlotView; showNumbers: boolean; busy: boolean; onChoose: (slug: string) => void }) {
+  const [onlyLight, setOnlyLight] = useState(false);
+  const hasLight = slot.choices.some((c) => c.light);
+  const list = onlyLight ? slot.choices.filter((c) => c.light) : slot.choices;
+  return (
+    <div className="flex flex-col gap-2">
+      {hasLight ? (
+        <button
+          type="button"
+          onClick={() => setOnlyLight(!onlyLight)}
+          aria-pressed={onlyLight}
+          className={`inline-flex w-fit min-h-8 cursor-pointer items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors ${onlyLight ? "bg-brand text-white" : "bg-surface ring-1 ring-line hover:bg-line/60"}`}
+        >
+          <Feather aria-hidden="true" className="size-3.5" />
+          רק קלילות
+        </button>
+      ) : null}
+      <ul className="flex max-h-80 flex-col gap-1.5 overflow-y-auto overscroll-contain pe-0.5">
+        {list.map((c) => {
+          const current = c.slug === slot.meal?.slug;
+          return (
+            <li key={c.slug}>
+              <button
+                type="button"
+                disabled={busy || current}
+                onClick={() => onChoose(c.slug)}
+                className={`flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-start transition-colors disabled:cursor-default ${current ? "bg-accent-soft ring-1 ring-accent" : "bg-surface hover:bg-line/40"}`}
+              >
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="flex items-center gap-1.5 text-sm font-medium">
+                    <span className="truncate">{c.title}</span>
+                    {c.light ? <span className="shrink-0 rounded-full bg-accent-soft px-1.5 text-[10px]">קליל</span> : null}
+                    {current ? <span className="shrink-0 text-[10px] text-ink-muted">בתפריט עכשיו</span> : null}
+                  </span>
+                  <span className="truncate text-xs text-ink-muted">{c.portions}</span>
+                </span>
+                {showNumbers ? (
+                  <span className="flex shrink-0 flex-col items-end leading-none">
+                    <span className="num text-sm font-semibold">{c.kcal}</span>
+                    <span className="text-[10px] text-ink-muted">חלבון {c.protein} ג׳</span>
+                  </span>
+                ) : null}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** Roughly how many calories this meal should have. The other meals share the rest of the day. */
+function KcalEditor({ slot, busy, onSave }: { slot: SlotView; busy: boolean; onSave: (kcal: number | null) => void }) {
+  const [kcal, setKcal] = useState(Math.round(slot.planned / 10) * 10);
+  const step = slot.type === "snack" ? 25 : 50;
+  const presets = slot.type === "snack" ? [100, 150, 200, 250] : [250, 350, 450, 600];
+  return (
+    <div className="flex flex-col gap-2.5 rounded-xl bg-surface p-3">
+      <span className="text-sm font-medium">כמה קלוריות בערך ל{slot.label}?</span>
+      <div className="flex items-center justify-center gap-3">
+        <button
+          type="button"
+          onClick={() => setKcal((k) => Math.max(80, k - step))}
+          aria-label="פחות"
+          className="flex size-10 cursor-pointer items-center justify-center rounded-full bg-field hover:bg-line/60"
+        >
+          <Minus aria-hidden="true" className="size-4" />
+        </button>
+        <span className="min-w-24 text-center">
+          <span className="num text-2xl font-semibold">{kcal}</span> <span className="text-sm text-ink-muted">קל׳</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => setKcal((k) => Math.min(1500, k + step))}
+          aria-label="יותר"
+          className="flex size-10 cursor-pointer items-center justify-center rounded-full bg-field hover:bg-line/60"
+        >
+          <Plus aria-hidden="true" className="size-4" />
+        </button>
+      </div>
+      <div className="flex flex-wrap justify-center gap-1.5">
+        {presets.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => setKcal(p)}
+            aria-pressed={kcal === p}
+            className={`num min-h-8 cursor-pointer rounded-full px-3 text-sm transition-colors ${kcal === p ? "bg-brand text-white" : "bg-field hover:bg-line/60"}`}
+          >
+            {p}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-ink-muted">שאר הארוחות יתחלקו במה שנשאר מהיעד היומי, והבחירה תישמר גם לימים הבאים.</p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => onSave(kcal)}
+          className="inline-flex min-h-10 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-brand px-4 text-sm font-medium text-white hover:bg-brand-strong disabled:opacity-50"
+        >
+          <Check aria-hidden="true" className="size-4" />
+          שמירה
+        </button>
+        {slot.custom ? (
+          <button type="button" disabled={busy} onClick={() => onSave(null)} className="min-h-10 cursor-pointer rounded-xl bg-field px-3 text-sm hover:bg-line/60 disabled:opacity-50">
+            חזרה לחלוקה הרגילה
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

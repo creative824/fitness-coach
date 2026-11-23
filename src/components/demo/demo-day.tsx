@@ -7,12 +7,14 @@ import { FoodEntry, kcalOf, useFoodEntry } from "@/components/food/food-entry";
 import { DayProvider, useDay } from "@/components/home/day-context";
 import { FitnessCard, type SmallTask, type WorkoutBlock } from "@/components/home/fitness-card";
 import { MenuCard, type MenuApi } from "@/components/home/menu-card";
-import { StatusCard } from "@/components/home/status-card";
+import { StatusCard, type WeekDayStat } from "@/components/home/status-card";
+import { FaceAvatar, FaceWithName } from "@/components/ui/face-avatar";
 import { EXERCISES } from "@/content/exercises";
+import { proteinTarget } from "@/lib/day/scores";
 import { smartTasks, type SmartTaskInput } from "@/lib/day/smart-tasks";
 import { totalsOf, type FoodItem } from "@/lib/food/items";
 import { describeItem } from "@/lib/food/parse";
-import { reshuffle, swapSlot, buildMenu, slotKcal, type DayMenu, type DietProfile } from "@/lib/menu/engine";
+import { buildMenu, chooseSlot, renderSlot, reshuffle, slotKcal, swapSlot, type DayMenu, type DietProfile } from "@/lib/menu/engine";
 import { toView } from "@/lib/menu/view";
 import type { MenuResult } from "@/lib/menu/actions";
 import type { GoalType } from "@/lib/onboarding/schema";
@@ -82,8 +84,8 @@ function setupFor(p: Person) {
   const tasks: SmallTask[] = smartTasks({
     goals: p.goals, experience: p.experience, activityLevel: p.activityLevel, age: p.age, bmi: bmiOf(p.weightKg, p.heightCm), weightKg: p.weightKg, sleepHours: p.sleepHours,
     lowIntensityOnly: false, needsDoctor: false, hideNumbers: false, workoutToday: blocks.length > 0, weeksIn: 0,
-  }).map((t) => ({ id: t.id, kind: t.kind, title: t.title, why: t.why, minutes: t.minutes, auto: false }));
-  return { target, menu, tasks, workout: p.workout && blocks.length ? { title: p.workout.title, minutes: p.workout.minutes, blocks } : null };
+  }).map((t) => ({ id: t.id, kind: t.kind, title: t.title, why: t.why, minutes: t.minutes, grams: t.grams, auto: false }));
+  return { target, menu, tasks, week: sampleWeek(p.id, target), protein: proteinTarget(p.goals, p.weightKg), workout: p.workout && blocks.length ? { title: p.workout.title, minutes: p.workout.minutes, blocks } : null };
 }
 
 export function DemoDay() {
@@ -144,15 +146,57 @@ export function DemoDay() {
   );
 }
 
-const ok = (menu: DayMenu, profile: DietProfile, eaten: number): MenuResult => ({ ok: true, menu: toView(menu, profile), eatenKcal: eaten });
+const LETTERS = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
+
+/** A made-up week up to today, so the weekly view and scores have something to show. */
+function sampleWeek(seed: string, target: number): WeekDayStat[] {
+  // A fixed sample: today is Thursday, Sunday to Wednesday are behind us.
+  const todayIdx = 4;
+  let h = seed.length * 7919 + 17;
+  const rnd = () => {
+    h = (h * 16807) % 2147483647;
+    return h / 2147483647;
+  };
+  return LETTERS.map((letter, i) => {
+    const past = i < todayIdx;
+    const kcal = past ? Math.round(target * (0.85 + rnd() * 0.3)) : null;
+    const off = kcal ? Math.abs(kcal / target - 1) : 0;
+    const cal = kcal ? Math.max(0, Math.min(100, off <= 0.1 ? 100 : Math.round(100 - ((off - 0.1) / 0.3) * 100))) : null;
+    const date = `sample-${i}`;
+    return {
+      date,
+      letter,
+      kcal,
+      workout: i % 2 === 1 ? (past ? (rnd() > 0.3 ? "done" : "partial") : "planned") : "none",
+      isToday: i === todayIdx,
+      future: i > todayIdx,
+      calorieScore: cal,
+      taskScore: past ? Math.round(55 + rnd() * 40) : null,
+    };
+  });
+}
+
+const ok = (menu: DayMenu, profile: DietProfile, eaten: { kcal: number; protein: number }): MenuResult => ({
+  ok: true,
+  menu: toView(menu, profile),
+  eatenKcal: eaten.kcal,
+  eatenProtein: eaten.protein,
+});
 
 function PersonDay({ person }: { person: Person }) {
   const [setup] = useState(() => setupFor(person));
   const menuRef = useRef(setup.menu);
   /** Food logged outside the menu (the diary and "on top of the menu"). */
-  const extraRef = useRef(0);
+  const extraRef = useRef({ kcal: 0, protein: 0 });
+  /** Protein of meals eaten "instead" of a menu meal, by slot. */
+  const insteadProtein = useRef(new Map<number, number>());
 
-  const eaten = () => menuRef.current.slots.reduce((a, s) => a + (s.eaten ? slotKcal(s) : 0), 0) + extraRef.current;
+  const eaten = () => {
+    const slots = menuRef.current.slots;
+    const kcal = slots.reduce((a, s) => a + (s.eaten ? slotKcal(s) : 0), 0) + extraRef.current.kcal;
+    const protein = slots.reduce((a, s, i) => a + (!s.eaten ? 0 : s.eaten.custom ? (insteadProtein.current.get(i) ?? 0) : (renderSlot(s)?.protein ?? 0)), 0) + extraRef.current.protein;
+    return { kcal, protein: Math.round(protein) };
+  };
   const done = (m: DayMenu) => {
     menuRef.current = m;
     return Promise.resolve(ok(m, person.diet, eaten()));
@@ -160,14 +204,24 @@ function PersonDay({ person }: { person: Person }) {
   const api: MenuApi = {
     eat: (i, yes) => done({ ...menuRef.current, slots: menuRef.current.slots.map((s, k) => (k === i ? { ...s, eaten: yes ? { logId: `demo-${i}` } : null } : s)) }),
     swap: (i) => done(swapSlot(menuRef.current, i, person.diet)),
-    swapAll: () => done(reshuffle(menuRef.current, { target: menuRef.current.target, mealsPerDay: person.mealsPerDay, profile: person.diet }, Math.floor(Math.random() * 2 ** 31))),
+    swapAll: () =>
+      done(reshuffle(menuRef.current, { target: menuRef.current.target, mealsPerDay: person.mealsPerDay, profile: person.diet, custom: menuRef.current.custom }, Math.floor(Math.random() * 2 ** 31))),
+    choose: (i, slug) => done(chooseSlot(menuRef.current, i, slug, person.diet)),
+    setKcal: (i, kcal) => {
+      const n = menuRef.current.slots.length;
+      const list = Array.from({ length: n }, (_, k) => menuRef.current.custom?.[k] ?? null);
+      list[i] = kcal;
+      if (list.every((x) => x !== null)) return Promise.resolve({ ok: false });
+      return done(reshuffle(menuRef.current, { target: menuRef.current.target, mealsPerDay: person.mealsPerDay, profile: person.diet, custom: list }, menuRef.current.seed));
+    },
     other: (input) => {
       const t = totalsOf(input.items as FoodItem[]);
       const kcal = t.kcal ? Math.round((t.kcal[0] + t.kcal[1]) / 2) : null;
       if (input.slot === null) {
-        extraRef.current += kcal ?? 0;
+        extraRef.current = { kcal: extraRef.current.kcal + (kcal ?? 0), protein: extraRef.current.protein + (t.protein ?? 0) };
         return done(menuRef.current);
       }
+      insteadProtein.current.set(input.slot, t.protein ?? 0);
       return done({
         ...menuRef.current,
         slots: menuRef.current.slots.map((s, k) => (k === input.slot ? { ...s, eaten: { logId: "demo", custom: { text: input.text.slice(0, 120), kcal } } } : s)),
@@ -177,17 +231,23 @@ function PersonDay({ person }: { person: Person }) {
 
   return (
     <DayProvider eatenKcal={0} workout={{ done: 0, total: setup.workout?.blocks.length ?? 0 }} activeMinutes={0}>
-      <StatusCard target={setup.target} showNumbers week={[]} water={null} weight={{ kg: person.weightKg, bmi: bmiOf(person.weightKg, person.heightCm) }} />
+      <DemoCompetition you={person.label} />
+      <StatusCard target={setup.target} showNumbers week={setup.week} water={null} weight={{ kg: person.weightKg, bmi: bmiOf(person.weightKg, person.heightCm) }} proteinTarget={setup.protein} />
       <MenuCard initial={toView(setup.menu, person.diet)} showNumbers saved aiEnabled={false} api={api} />
       <FitnessCard workout={setup.workout} tasks={setup.tasks} initial={{ done: [], acts: [] }} weightKg={person.weightKg} saved demo />
-      <DemoDiary onAdd={(k) => (extraRef.current += k)} eaten={eaten} />
+      <DemoDiary
+        onAdd={(k, p) => {
+          extraRef.current = { kcal: extraRef.current.kcal + k, protein: extraRef.current.protein + p };
+        }}
+        eaten={eaten}
+      />
     </DayProvider>
   );
 }
 
 /** The food diary of the demo: type what you ate, see the calories, add it to the day. */
-function DemoDiary({ onAdd, eaten }: { onAdd: (kcal: number) => void; eaten: () => number }) {
-  const { setEatenKcal } = useDay();
+function DemoDiary({ onAdd, eaten }: { onAdd: (kcal: number, protein: number) => void; eaten: () => { kcal: number; protein: number } }) {
+  const { setEatenKcal, setEatenProtein } = useDay();
   const entry = useFoodEntry();
   const [logs, setLogs] = useState<{ text: string; items: FoodItem[]; kcal: number }[]>([]);
   const [saving, start] = useTransition();
@@ -196,8 +256,10 @@ function DemoDiary({ onAdd, eaten }: { onAdd: (kcal: number) => void; eaten: () 
     const kcal = entry.kcal;
     const item = { text: entry.text, items: entry.items, kcal };
     start(async () => {
-      onAdd(kcal);
-      setEatenKcal(eaten());
+      onAdd(kcal, totalsOf(item.items).protein ?? 0);
+      const now = eaten();
+      setEatenKcal(now.kcal);
+      setEatenProtein(now.protein);
       setLogs((l) => [...l, item]);
       entry.reset();
     });
@@ -245,6 +307,49 @@ function DemoDiary({ onAdd, eaten }: { onAdd: (kcal: number) => void; eaten: () 
           ))}
         </ul>
       ) : null}
+    </section>
+  );
+}
+
+const RIVALS = ["דנה", "יוסי", "מיכל", "אבי", "נועה"];
+
+/** A sample competition: faces with names, so the table reads like people, not a list of words. */
+function DemoCompetition({ you }: { you: string }) {
+  const people = [
+    { key: "demo-dana", name: RIVALS[0], score: 92 },
+    { key: "demo-you", name: "את/ה", score: 81, me: true },
+    { key: "demo-yossi", name: RIVALS[1], score: 77 },
+    { key: "demo-michal", name: RIVALS[2], score: 64 },
+    { key: "demo-avi", name: RIVALS[3], score: 58 },
+    { key: "demo-noa", name: RIVALS[4], score: 41 },
+  ];
+  const [first, second, third] = people;
+  return (
+    <section aria-labelledby="demo-comp" className="flex flex-col gap-3 rounded-[var(--radius-card)] bg-surface p-4 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 id="demo-comp" className="font-semibold">
+          תחרות לדוגמה: אתגר החודש
+        </h2>
+        <span className="text-xs text-ink-muted">{you} · מקום 2</span>
+      </div>
+      <div className="flex items-end justify-center gap-3 rounded-xl bg-field px-3 pt-4 pb-3">
+        {[second, first, third].map((p) => (
+          <div key={p.key} className={`flex flex-col items-center ${p === first ? "-translate-y-2" : ""}`}>
+            {p === first ? <span aria-hidden="true">👑</span> : null}
+            <FaceWithName seed={p.key + you} name={p.name} size={p === first ? 68 : 54} note={`${p.score}%`} highlight={Boolean(p.me)} />
+          </div>
+        ))}
+      </div>
+      <ol className="flex flex-col gap-1.5">
+        {people.slice(3).map((p, i) => (
+          <li key={p.key} className="flex items-center gap-3 rounded-xl bg-field px-3 py-2">
+            <span className="num w-5 text-center text-sm font-semibold">{i + 4}</span>
+            <FaceAvatar seed={p.key + you} size={32} />
+            <span className="flex-1 text-sm font-medium">{p.name}</span>
+            <span className="num text-sm font-semibold">{p.score}%</span>
+          </li>
+        ))}
+      </ol>
     </section>
   );
 }

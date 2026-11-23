@@ -21,6 +21,8 @@ export interface DayContext {
   menuKcal: number;
   profile: DietProfile;
   mealsPerDay: number | null;
+  /** Calories the user set by hand per meal of the day (null: the usual share). */
+  slotKcal: (number | null)[] | null;
   /** Calorie numbers are shown unless tracking is off or the safety screen hides them (eating disorder). */
   showNumbers: boolean;
   hideWeight: boolean;
@@ -38,7 +40,7 @@ export const loadDayContext = cache(async (userId: string): Promise<DayContext> 
   const supabase = await createClient();
   const [state, { data: profile }, { data: lastWeight }] = await Promise.all([
     loadOnboarding(userId),
-    supabase.from("profiles").select("calorie_tracking").eq("user_id", userId).maybeSingle(),
+    supabase.from("profiles").select("calorie_tracking, preferences").eq("user_id", userId).maybeSingle(),
     supabase.from("weight_logs").select("weight_kg").eq("user_id", userId).order("date", { ascending: false }).limit(1).maybeSingle(),
   ]);
   const d = state.draft;
@@ -66,7 +68,10 @@ export const loadDayContext = cache(async (userId: string): Promise<DayContext> 
   }
   const kcal = cal?.kcal ?? FALLBACK_KCAL;
   if (!cal) targetKind = "placeholder";
-  const tracking = (profile as { calorie_tracking?: boolean } | null)?.calorie_tracking !== false;
+  const prefs = (profile as { calorie_tracking?: boolean; preferences?: { slot_kcal?: unknown } } | null) ?? null;
+  const tracking = prefs?.calorie_tracking !== false;
+  const rawSlots = prefs?.preferences?.slot_kcal;
+  const slotKcal = Array.isArray(rawSlots) ? rawSlots.map((x) => (typeof x === "number" ? x : null)) : null;
   return {
     draft: d,
     ready: Boolean(state.completedAt),
@@ -75,6 +80,7 @@ export const loadDayContext = cache(async (userId: string): Promise<DayContext> 
     menuKcal: kcal,
     profile: { pattern: d.dietary_pattern, allergies: d.allergies, avoid: [...d.dislikes, ...d.sensitivities] },
     mealsPerDay: d.meals_per_day,
+    slotKcal,
     showNumbers: tracking && !hideNumbers,
     hideWeight: safety.restrictions.hideWeightTracking,
     heightCm: d.height_cm,

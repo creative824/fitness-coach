@@ -19,7 +19,10 @@ async function persist(draft: OnboardingDraft, step: number, complete: boolean):
   const rows = draftToRows(user.id, parsed.data as OnboardingDraft, step, new Date());
   const supabase = await createClient();
 
-  const profile = complete ? { ...rows.profile, onboarding_completed_at: new Date().toISOString() } : rows.profile;
+  // Settings kept in preferences outside the questionnaire (meal calories) survive a re-save.
+  const { data: before } = await supabase.from("profiles").select("preferences").eq("user_id", user.id).maybeSingle();
+  const merged = { ...rows.profile, preferences: { ...((before?.preferences as Record<string, unknown> | null) ?? {}), ...rows.profile.preferences } };
+  const profile = complete ? { ...merged, onboarding_completed_at: new Date().toISOString() } : merged;
   const results = await Promise.all([
     supabase.from("profiles").upsert(profile),
     supabase.from("food_preferences").upsert(rows.food),

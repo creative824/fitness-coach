@@ -1,8 +1,9 @@
 "use client";
 
-import { Droplet, Dumbbell, Plus, Scale } from "lucide-react";
+import { Beef, Droplet, Dumbbell, Plus, Scale } from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
+import { calorieScore, scoreWord, taskScore, weekAverage } from "@/lib/day/scores";
 import { addWaterFill } from "@/lib/water/actions";
 import { CalorieRing } from "./calorie-ring";
 import { fmt, useDay } from "./day-context";
@@ -15,6 +16,9 @@ export interface WeekDayStat {
   workout: "done" | "partial" | "planned" | "none";
   isToday: boolean;
   future: boolean;
+  /** Scores of a past day (today's are worked out live on the screen). */
+  calorieScore: number | null;
+  taskScore: number | null;
 }
 
 export interface WaterMini {
@@ -34,14 +38,25 @@ export function StatusCard({
   week,
   water,
   weight,
+  proteinTarget = null,
 }: {
   target: number | null;
   showNumbers: boolean;
   week: WeekDayStat[];
   water: WaterMini | null;
   weight: { kg: number; bmi: number | null } | null;
+  /** Grams of protein for the day, or null without a weight or with numbers hidden. */
+  proteinTarget?: number | null;
 }) {
   const [tab, setTab] = useState<"day" | "week">("day");
+  const { eatenKcal, eatenProtein, actions } = useDay();
+  const kcalTarget = showNumbers ? target : null;
+  const protein = showNumbers && proteinTarget ? { eaten: eatenProtein, target: proteinTarget } : null;
+  const todayCal = calorieScore(eatenKcal, kcalTarget, true);
+  const today = taskScore({ calorie: todayCal, protein, actions });
+  const past = week.filter((d) => !d.future && !d.isToday);
+  const weekCal = weekAverage([...past.map((d) => d.calorieScore), todayCal]);
+  const weekTask = weekAverage([...past.map((d) => d.taskScore), today.score]);
   return (
     <section aria-label="תמונת מצב" className="rounded-[var(--radius-card)] bg-night p-4 text-white shadow-[var(--shadow-float)] sm:p-5">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -66,13 +81,83 @@ export function StatusCard({
           ))}
         </div>
       </div>
-      {tab === "day" ? <DayView target={target} showNumbers={showNumbers} water={water} weight={weight} /> : <WeekView target={target} showNumbers={showNumbers} week={week} />}
+      <div className="mb-4 grid grid-cols-2 gap-2">
+        <ScoreTile
+          label="מדד קלוריות"
+          fresh={tab === "day"}
+          score={tab === "day" ? todayCal : weekCal}
+          note={kcalTarget === null ? "בלי ספירת קלוריות" : tab === "day" ? "כמה קרוב ליעד היום" : "ממוצע הימים השבוע"}
+        />
+        <ScoreTile
+          label="מדד משימות"
+          fresh={tab === "day"}
+          score={tab === "day" ? today.score : weekTask}
+          note={
+            tab === "day"
+              ? [
+                  today.parts.calories !== null ? `קלוריות ${today.parts.calories}` : null,
+                  today.parts.protein !== null ? `חלבון ${today.parts.protein}` : null,
+                  today.parts.actions !== null ? `פעולות ${today.parts.actions}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "קלוריות, חלבון ופעולות"
+              : "ממוצע הימים השבוע"
+          }
+        />
+      </div>
+      {tab === "day" ? <DayView proteinTarget={protein?.target ?? null} target={target} showNumbers={showNumbers} water={water} weight={weight} /> : <WeekView target={target} showNumbers={showNumbers} week={week} />}
     </section>
   );
 }
 
-function DayView({ target, showNumbers, water, weight }: { target: number | null; showNumbers: boolean; water: WaterMini | null; weight: { kg: number; bmi: number | null } | null }) {
-  const { eatenKcal, workout, activeMinutes } = useDay();
+/** One score, 0–100, with a small ring. */
+function ScoreTile({ label, score, note, fresh = false }: { label: string; score: number | null; note: string; fresh?: boolean }) {
+  const r = 17;
+  const c = 2 * Math.PI * r;
+  const tone = score === null ? "text-white/20" : score >= 65 ? "text-accent" : score >= 40 ? "text-sky" : "text-coral";
+  return (
+    <div className="flex items-center gap-2.5 rounded-xl bg-white/[0.06] p-2.5">
+      <span className="relative flex size-11 shrink-0 items-center justify-center">
+        <svg viewBox="0 0 40 40" className="absolute inset-0 -rotate-90" aria-hidden="true">
+          <circle cx="20" cy="20" r={r} fill="none" stroke="currentColor" strokeWidth="4" className="text-white/10" />
+          <circle
+            cx="20"
+            cy="20"
+            r={r}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeDasharray={c}
+            strokeDashoffset={c * (1 - (score ?? 0) / 100)}
+            className={`${tone} transition-[stroke-dashoffset] duration-700`}
+          />
+        </svg>
+        <span className="num text-sm font-semibold">{score ?? "–"}</span>
+      </span>
+      <span className="flex min-w-0 flex-col">
+        <span className="text-sm font-medium">{label}</span>
+        <span className="text-[11px] text-white/60">{fresh && !score ? "היום רק התחיל" : scoreWord(score)}</span>
+        <span className="truncate text-[10px] text-white/45">{note}</span>
+      </span>
+    </div>
+  );
+}
+
+function DayView({
+  target,
+  showNumbers,
+  water,
+  weight,
+  proteinTarget,
+}: {
+  target: number | null;
+  showNumbers: boolean;
+  water: WaterMini | null;
+  weight: { kg: number; bmi: number | null } | null;
+  proteinTarget: number | null;
+}) {
+  const { eatenKcal, eatenProtein, workout, activeMinutes } = useDay();
   const left = target !== null ? target - eatenKcal : null;
   const pct = workout.total ? Math.round((workout.done / workout.total) * 100) : 0;
 
@@ -131,6 +216,23 @@ function DayView({ target, showNumbers, water, weight }: { target: number | null
               ) : null}
             </span>
           </div>
+
+          {proteinTarget ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="flex items-center justify-between gap-2 text-sm">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Beef aria-hidden="true" className="size-4 text-coral" />
+                  חלבון
+                </span>
+                <span className="text-white/80">
+                  <span className="num">{Math.round(eatenProtein)}</span>/<span className="num">{proteinTarget}</span> ג׳
+                </span>
+              </span>
+              <div className="h-2 overflow-hidden rounded-full bg-white/10" role="progressbar" aria-valuenow={Math.round(eatenProtein)} aria-valuemin={0} aria-valuemax={proteinTarget} aria-label="חלבון היום">
+                <div className="h-full rounded-full bg-coral transition-[width] duration-500" style={{ width: `${Math.min(100, (eatenProtein / proteinTarget) * 100)}%` }} />
+              </div>
+            </div>
+          ) : null}
 
           {water ? <WaterRow water={water} /> : null}
         </div>

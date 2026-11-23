@@ -9,10 +9,15 @@ import { createContext, useContext, useState, type ReactNode } from "react";
 interface DayState {
   eatenKcal: number;
   setEatenKcal: (n: number) => void;
+  eatenProtein: number;
+  setEatenProtein: (n: number) => void;
   workout: { done: number; total: number };
   setWorkout: (w: { done: number; total: number }) => void;
   activeMinutes: number;
   setActiveMinutes: (n: number) => void;
+  /** Exercises and small daily tasks done, for the tasks score. */
+  actions: { done: number; total: number };
+  setActions: (a: { done: number; total: number }) => void;
 }
 
 const Ctx = createContext<DayState | null>(null);
@@ -20,19 +25,36 @@ const Ctx = createContext<DayState | null>(null);
 export function DayProvider({
   children,
   eatenKcal,
+  eatenProtein = 0,
   workout,
   activeMinutes,
 }: {
   children: ReactNode;
   eatenKcal: number;
+  eatenProtein?: number;
   workout: { done: number; total: number };
   activeMinutes: number;
 }) {
   const [eaten, setEaten] = useState(eatenKcal);
+  const [protein, setProtein] = useState(eatenProtein);
   const [w, setW] = useState(workout);
   const [mins, setMins] = useState(activeMinutes);
+  const [actions, setActions] = useState({ done: 0, total: 0 });
   return (
-    <Ctx.Provider value={{ eatenKcal: eaten, setEatenKcal: setEaten, workout: w, setWorkout: setW, activeMinutes: mins, setActiveMinutes: setMins }}>
+    <Ctx.Provider
+      value={{
+        eatenKcal: eaten,
+        setEatenKcal: setEaten,
+        eatenProtein: protein,
+        setEatenProtein: setProtein,
+        workout: w,
+        setWorkout: setW,
+        activeMinutes: mins,
+        setActiveMinutes: setMins,
+        actions,
+        setActions,
+      }}
+    >
       {children}
     </Ctx.Provider>
   );

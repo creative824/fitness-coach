@@ -33,7 +33,7 @@ export function fitnessOf(v: unknown): FitnessState {
 }
 
 export function freshMenu(ctx: DayContext, userId: string, date: string, seed = seedFrom(`${userId}:${date}`)): DayMenu {
-  return buildMenu({ target: ctx.menuKcal, mealsPerDay: ctx.mealsPerDay, profile: ctx.profile, seed });
+  return buildMenu({ target: ctx.menuKcal, mealsPerDay: ctx.mealsPerDay, profile: ctx.profile, seed, custom: ctx.slotKcal });
 }
 
 /** Today's row, creating the menu the first time the day is opened. */
@@ -43,7 +43,7 @@ export async function loadDayLog(userId: string, date: string): Promise<DayLog> 
   const { data, error } = await supabase.from("day_logs").select("menu, fitness").eq("user_id", userId).eq("date", date).maybeSingle();
   if (error) return { saved: false, menu: freshMenu(ctx, userId, date), fitness: EMPTY_FITNESS };
   if (data && isMenu(data.menu)) {
-    const menu = upgradeMenu(data.menu, { target: ctx.menuKcal, mealsPerDay: ctx.mealsPerDay, profile: ctx.profile });
+    const menu = upgradeMenu(data.menu, { target: ctx.menuKcal, mealsPerDay: ctx.mealsPerDay, profile: ctx.profile, custom: ctx.slotKcal });
     if (menu !== data.menu) {
       const { error: upErr } = await supabase.from("day_logs").update({ menu }).eq("user_id", userId).eq("date", date);
       if (upErr) console.error("day_logs menu upgrade failed", upErr.message);

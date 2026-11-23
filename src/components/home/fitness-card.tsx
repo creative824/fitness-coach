@@ -34,6 +34,8 @@ export interface SmallTask {
   title: string;
   why: string;
   minutes?: number;
+  /** Grams for the protein task: done as soon as the day's food reaches them. */
+  grams?: number;
   /** Done without a tap: e.g. enough food logged, or protein reached. */
   auto: boolean;
 }
@@ -75,7 +77,7 @@ export function FitnessCard({
   /** Keep changes in the page only (the demo without an account). */
   demo?: boolean;
 }) {
-  const { setWorkout, setActiveMinutes } = useDay();
+  const { setWorkout, setActiveMinutes, setActions, eatenProtein } = useDay();
   const [fit, setFit] = useState(initial);
   const [sheet, setSheet] = useState<WorkoutBlock | null>(null);
   const [adding, setAdding] = useState(false);
@@ -112,7 +114,10 @@ export function FitnessCard({
 
   /** Movement tasks fill up from the activities added; the rest are ticked by hand (or done automatically). */
   const progressOf = (t: SmallTask) => (t.minutes ? Math.min(t.minutes, minutesFor(t.kind, fit.acts)) : 0);
-  const isTaskDone = (t: SmallTask) => t.auto || fit.done.includes(`t:${t.id}`) || (t.minutes ? progressOf(t) >= t.minutes : false);
+  const isTaskDone = (t: SmallTask) =>
+    t.auto || fit.done.includes(`t:${t.id}`) || (t.minutes ? progressOf(t) >= t.minutes : false) || (t.kind === "protein" && Boolean(t.grams) && eatenProtein >= (t.grams ?? 0));
+  const tasksDone = tasks.filter(isTaskDone).length;
+  useEffect(() => setActions({ done: doneCount + tasksDone, total: total + tasks.length }), [doneCount, tasksDone, total, tasks.length, setActions]);
 
   function toggleTask(t: SmallTask) {
     const key = `t:${t.id}`;

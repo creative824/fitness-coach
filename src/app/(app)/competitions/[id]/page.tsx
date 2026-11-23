@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { BackLink } from "@/components/competitions/create-form";
 import { LeaveButton, OwnerPanel } from "@/components/competitions/manage";
 import { Card } from "@/components/ui/card";
+import { FaceAvatar, FaceWithName } from "@/components/ui/face-avatar";
 import { LoadingState } from "@/components/ui/states";
 import { loadCompetition, type CompetitionView } from "@/lib/competitions/data";
 import { KIND_INFO, PRIZES, SHARED_RULES, STATUS_LABEL, timeLeftLabel } from "@/lib/competitions/rules";
@@ -59,6 +60,7 @@ async function CompetitionContent({ params }: { params: Promise<{ id: string }> 
       <Card className="flex flex-col gap-3">
         <h2 className="font-semibold">{view.results.length ? "הטבלה בסיום" : "הטבלה עכשיו"}</h2>
         {c.status === "upcoming" ? <p className="text-sm text-ink-muted">הניקוד יתחיל ביום הראשון של התחרות.</p> : null}
+        <Podium standings={standings} />
         <ol className="flex flex-col gap-2">
           {standings.map((s) => (
             <li
@@ -67,6 +69,7 @@ async function CompetitionContent({ params }: { params: Promise<{ id: string }> 
             >
               <div className="flex items-center gap-3">
                 <span className="w-6 text-center font-semibold tabular-nums">{s.rank ?? "–"}</span>
+                <FaceAvatar seed={s.member_key} size={36} />
                 <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate font-medium">
                   {s.display_name}
                   {s.is_owner ? <Crown aria-label="יוצר התחרות" className="size-3.5 shrink-0 text-ink-muted" /> : null}
@@ -107,6 +110,27 @@ async function CompetitionContent({ params }: { params: Promise<{ id: string }> 
         <LeaveButton id={c.id} />
       ) : null}
     </>
+  );
+}
+
+/** The first three (or everyone, when there are fewer), as faces with names, first place in the middle. */
+function Podium({ standings }: { standings: CompetitionView["standings"] }) {
+  const top = standings.slice(0, 3);
+  if (top.length < 2) return null;
+  const order = top.length === 3 ? [top[1], top[0], top[2]] : [top[0], top[1]];
+  return (
+    <div className="flex items-end justify-center gap-3 rounded-xl bg-field px-3 pt-4 pb-3" aria-label="שלושת הראשונים">
+      {order.map((p) => {
+        const first = p === top[0];
+        return (
+          <div key={p.member_key} className={`flex flex-col items-center ${first ? "-translate-y-2" : ""}`}>
+            {first ? <Crown aria-hidden="true" className="mb-0.5 size-5 text-ink" /> : null}
+            <FaceWithName seed={p.member_key} name={p.display_name} size={first ? 68 : 54} note={p.score === null ? undefined : `${p.score}%`} highlight={p.is_me} />
+            <span className={`mt-1 flex size-6 items-center justify-center rounded-full text-xs font-bold ${first ? "bg-accent" : "bg-surface"}`}>{p.rank ?? "–"}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
