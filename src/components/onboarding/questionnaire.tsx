@@ -25,6 +25,9 @@ import {
 } from "@/lib/onboarding/schema";
 import { allowedGoals, screenSafety } from "@/lib/safety/screen";
 import { CalorieTargetCard } from "./calorie-target";
+import { AvatarEditor } from "@/components/ui/avatar-editor";
+import { FaceAvatar } from "@/components/ui/face-avatar";
+import { avatarFromSeed } from "@/lib/avatar";
 import { ChipGroup, ListField, NumberField, TextField, YesNo } from "./fields";
 
 const t = getDictionary();
@@ -135,6 +138,7 @@ export function Questionnaire({ initial, initialStep }: { initial: OnboardingDra
       {key === "details" && (
         <Card className="flex flex-col gap-5">
           <TextField label={f.display_name} value={draft.display_name} maxLength={40} invalid={bad("display_name")} onChange={(v) => set("display_name", v)} />
+          <AvatarStep draft={draft} onChange={(v) => set("avatar", v)} />
           <NumberField label={f.age} value={draft.age} min={MIN_AGE} max={100} invalid={bad("age")} hint={t.auth.ageNote} onChange={(v) => set("age", v)} />
           <div className="grid grid-cols-2 gap-4">
             <NumberField label={f.height_cm} value={draft.height_cm} min={120} max={230} invalid={bad("height_cm")} onChange={(v) => set("height_cm", v)} />
@@ -250,6 +254,34 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
       {status === "saved" ? <Check aria-hidden="true" className="size-4" /> : null}
       {status === "saving" ? s.saving : status === "saved" ? s.saved : s.saveError}
     </span>
+  );
+}
+
+/** The face for the app: closed it shows the current face and a button; open, the editor. */
+function AvatarStep({ draft, onChange }: { draft: OnboardingDraft; onChange: (v: OnboardingDraft["avatar"]) => void }) {
+  const [open, setOpen] = useState(false);
+  const value = draft.avatar ?? avatarFromSeed(draft.display_name || "new");
+  if (!open) {
+    return (
+      <div className="flex items-center gap-3 rounded-xl bg-field p-3">
+        <FaceAvatar seed="me" config={value} size={56} />
+        <div className="flex flex-1 flex-col">
+          <span className="font-medium">האווטאר שלך</span>
+          <span className="text-xs text-ink-muted">ככה יראו אותך בתחרויות. אפשר לשנות גם אחר כך.</span>
+        </div>
+        <button type="button" onClick={() => setOpen(true)} className="min-h-10 cursor-pointer rounded-xl bg-brand px-3 text-sm font-medium text-white hover:bg-brand-strong">
+          {draft.avatar ? "עריכה" : "יצירה"}
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-3 rounded-xl bg-field/60 p-3 ring-1 ring-line">
+      <AvatarEditor value={value} onChange={onChange} name={draft.display_name || undefined} />
+      <button type="button" onClick={() => { if (!draft.avatar) onChange(value); setOpen(false); }} className="min-h-10 cursor-pointer rounded-xl bg-brand px-4 text-sm font-medium text-white hover:bg-brand-strong">
+        סיום
+      </button>
+    </div>
   );
 }
 

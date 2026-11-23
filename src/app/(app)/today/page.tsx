@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { ArrowLeft, ClipboardList } from "lucide-react";
+import Link from "next/link";
 import { Suspense } from "react";
+import { FaceAvatar } from "@/components/ui/face-avatar";
+import type { AvatarConfig } from "@/lib/avatar";
 import { CompetitionsStrip } from "@/components/home/competitions-strip";
 import { DayProvider } from "@/components/home/day-context";
 import { FitnessCard, type SmallTask, type WorkoutBlock } from "@/components/home/fitness-card";
@@ -60,7 +63,7 @@ async function Today() {
   if (!ctx.ready) {
     return (
       <>
-        <Header name={name} date={date} />
+        <Header name={name} date={date} seed={user.id} avatar={ctx.draft.avatar} />
         <EmptyState
           icon={<ClipboardList aria-hidden="true" />}
           title={s.emptyTitle}
@@ -183,7 +186,7 @@ async function Today() {
 
   return (
     <DayProvider eatenKcal={mid(food?.totals.kcal) ?? 0} eatenProtein={food?.totals.protein ?? 0} workout={{ done: doneBlocks, total: blocks.length }} activeMinutes={day.fitness.acts.reduce((a, x) => a + x.min, 0)}>
-      <Header name={name} date={date} />
+      <Header name={name} date={date} seed={user.id} avatar={ctx.draft.avatar} />
       <Suspense fallback={<div className="h-[76px] animate-pulse rounded-[var(--radius-card)] bg-white/60" aria-hidden="true" />}>
         <Competitions userId={user.id} today={date} />
       </Suspense>
@@ -207,10 +210,15 @@ async function Competitions({ userId, today }: { userId: string; today: string }
   return <CompetitionsStrip items={items} today={today} />;
 }
 
-function Header({ name, date }: { name: string; date: string }) {
+function Header({ name, date, seed, avatar }: { name: string; date: string; seed: string; avatar: AvatarConfig | null }) {
   return (
-    <header className="flex items-baseline justify-between gap-3 pt-1">
-      <h1 className="text-2xl leading-tight font-semibold">{name ? `היי ${name.trim()}` : s.title}</h1>
+    <header className="flex items-center justify-between gap-3 pt-1">
+      <span className="flex min-w-0 items-center gap-2.5">
+        <Link href="/profile" aria-label="הפרופיל שלי" className="shrink-0 rounded-full">
+          <FaceAvatar seed={seed} config={avatar} size={44} />
+        </Link>
+        <h1 className="truncate text-2xl leading-tight font-semibold">{name ? `היי ${name.trim()}` : s.title}</h1>
+      </span>
       <span className="text-sm text-ink-muted">{longDate.format(new Date(`${date}T12:00:00Z`))}</span>
     </header>
   );

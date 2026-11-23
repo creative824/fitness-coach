@@ -8,7 +8,9 @@ import { DayProvider, useDay } from "@/components/home/day-context";
 import { FitnessCard, type SmallTask, type WorkoutBlock } from "@/components/home/fitness-card";
 import { MenuCard, type MenuApi } from "@/components/home/menu-card";
 import { StatusCard, type WeekDayStat } from "@/components/home/status-card";
+import { AvatarEditor } from "@/components/ui/avatar-editor";
 import { FaceAvatar, FaceWithName } from "@/components/ui/face-avatar";
+import { avatarFromSeed, type AvatarConfig } from "@/lib/avatar";
 import { EXERCISES } from "@/content/exercises";
 import { proteinTarget } from "@/lib/day/scores";
 import { smartTasks, type SmartTaskInput } from "@/lib/day/smart-tasks";
@@ -92,6 +94,8 @@ export function DemoDay() {
   const [who, setWho] = useState(PEOPLE[0].id);
   const person = PEOPLE.find((p) => p.id === who)!;
   const [locked, setLocked] = useState(false);
+  const [avatar, setAvatar] = useState<AvatarConfig>(() => avatarFromSeed("demo-visitor"));
+  const [editing, setEditing] = useState(false);
   // Links into the app's own pages need an account: keep the visitor here and say so.
   function stayHere(e: React.MouseEvent) {
     const a = (e.target as HTMLElement).closest("a");
@@ -132,6 +136,23 @@ export function DemoDay() {
           ))}
         </div>
         <p className="text-xs text-ink-muted">{person.about}</p>
+        {editing ? (
+          <div className="flex flex-col gap-3 rounded-xl bg-surface p-3">
+            <AvatarEditor value={avatar} onChange={setAvatar} name="האווטאר שלך" />
+            <button type="button" onClick={() => setEditing(false)} className="min-h-10 cursor-pointer rounded-xl bg-brand px-4 text-sm font-medium text-white hover:bg-brand-strong">
+              סיום
+            </button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setEditing(true)} className="flex cursor-pointer items-center gap-3 rounded-xl bg-surface p-2.5 text-start hover:bg-white">
+            <FaceAvatar seed="me" config={avatar} size={44} />
+            <span className="flex flex-1 flex-col">
+              <span className="text-sm font-medium">האווטאר שלך</span>
+              <span className="text-xs text-ink-muted">בהרשמה כל אחד יוצר לעצמו. נסו כאן.</span>
+            </span>
+            <span className="rounded-lg bg-brand px-3 py-1.5 text-sm font-medium text-white">יצירה</span>
+          </button>
+        )}
       </div>
       {locked ? (
         <p role="status" className="fixed inset-x-4 bottom-4 z-50 mx-auto flex max-w-md items-center justify-between gap-3 rounded-xl bg-ink px-4 py-3 text-sm text-white shadow-lg">
@@ -141,7 +162,7 @@ export function DemoDay() {
           </button>
         </p>
       ) : null}
-      <PersonDay key={person.id} person={person} />
+      <PersonDay key={person.id} person={person} avatar={avatar} />
     </div>
   );
 }
@@ -191,7 +212,7 @@ const ok = (menu: DayMenu, profile: DietProfile, eaten: { kcal: number; protein:
   eatenProtein: eaten.protein,
 });
 
-function PersonDay({ person }: { person: Person }) {
+function PersonDay({ person, avatar }: { person: Person; avatar: AvatarConfig }) {
   const [setup] = useState(() => setupFor(person));
   const menuRef = useRef(setup.menu);
   /** Food logged outside the menu (the diary and "on top of the menu"). */
@@ -239,7 +260,7 @@ function PersonDay({ person }: { person: Person }) {
 
   return (
     <DayProvider eatenKcal={0} workout={{ done: 0, total: setup.workout?.blocks.length ?? 0 }} activeMinutes={0}>
-      <DemoCompetition you={person.label} />
+      <DemoCompetition you={person.label} avatar={avatar} />
       <StatusCard target={setup.target} showNumbers week={setup.week} water={null} weight={setup.weight} localWeight proteinTarget={setup.protein} />
       <MenuCard initial={toView(setup.menu, person.diet)} showNumbers saved aiEnabled={false} api={api} />
       <FitnessCard workout={setup.workout} tasks={setup.tasks} initial={{ done: [], acts: [] }} weightKg={person.weightKg} saved demo />
@@ -322,7 +343,7 @@ function DemoDiary({ onAdd, eaten }: { onAdd: (kcal: number, protein: number) =>
 const RIVALS = ["דנה", "יוסי", "מיכל", "אבי", "נועה"];
 
 /** A sample competition: faces with names, so the table reads like people, not a list of words. */
-function DemoCompetition({ you }: { you: string }) {
+function DemoCompetition({ you, avatar }: { you: string; avatar: AvatarConfig }) {
   const people = [
     { key: "demo-dana", name: RIVALS[0], score: 3.8 },
     { key: "demo-you", name: "את/ה", score: 3.1, me: true },
@@ -344,7 +365,7 @@ function DemoCompetition({ you }: { you: string }) {
         {[second, first, third].map((p) => (
           <div key={p.key} className={`flex flex-col items-center ${p === first ? "-translate-y-2" : ""}`}>
             {p === first ? <span aria-hidden="true">👑</span> : null}
-            <FaceWithName seed={p.key + you} name={p.name} size={p === first ? 68 : 54} note={`${p.score.toFixed(1)}%`} highlight={Boolean(p.me)} />
+            <FaceWithName seed={p.key + you} config={p.me ? avatar : null} name={p.name} size={p === first ? 68 : 54} note={`${p.score.toFixed(1)}%`} highlight={Boolean(p.me)} />
           </div>
         ))}
       </div>

@@ -11,6 +11,8 @@
 --   weight in kilograms.
 -- - Someone whose health answers rule out a weight-loss goal (pregnancy, an eating disorder,
 --   underweight...) cannot create or join this kind of competition.
+-- - Standings also return each member's chosen avatar (an illustration picked at signup,
+--   profiles.preferences->avatar), so the table shows faces. Nothing else from the profile.
 
 alter table public.leaderboards drop constraint if exists leaderboards_kind_check;
 alter table public.leaderboards add constraint leaderboards_kind_check
@@ -84,10 +86,13 @@ begin
   return b.id;
 end $$;
 
+-- The return type gains a column (avatar), so the function is replaced, not altered.
+drop function if exists public.leaderboard_standings(uuid);
+
 -- Standings. For 'weight_loss' the score is tenths of a percent lost (capped at a healthy
 -- pace), done = weigh-ins in the competition and planned = 0. Other kinds are as in 0008.
 create or replace function public.leaderboard_standings(p_id uuid)
-returns table (member_key text, display_name text, is_me boolean, is_owner boolean, done int, planned int, score int, rank int)
+returns table (member_key text, display_name text, is_me boolean, is_owner boolean, done int, planned int, score int, rank int, avatar jsonb)
 language plpgsql stable security definer set search_path = '' as $$
 #variable_conflict use_column
 declare
@@ -135,7 +140,8 @@ begin
     )
     select md5(s.user_id::text || p_id::text), s.display_name, s.user_id = auth.uid(), s.role = 'owner',
            s.in_window, 0, s.pct,
-           (case when s.pct is null then null else rank() over (order by s.pct desc nulls last) end)::int
+           (case when s.pct is null then null else rank() over (order by s.pct desc nulls last) end)::int,
+           (select p.preferences->'avatar' from public.profiles p where p.user_id = s.user_id)
     from scored s
     order by s.pct desc nulls last, s.display_name;
     return;
@@ -169,7 +175,8 @@ begin
   )
   select md5(s.user_id::text || p_id::text), s.display_name, s.user_id = auth.uid(), s.role = 'owner',
          s.done_n, s.planned_n, s.pct,
-         (case when s.pct is null then null else rank() over (order by s.pct desc nulls last) end)::int
+         (case when s.pct is null then null else rank() over (order by s.pct desc nulls last) end)::int,
+         (select p.preferences->'avatar' from public.profiles p where p.user_id = s.user_id)
   from scored s
   order by s.pct desc nulls last, s.display_name;
 end $$;

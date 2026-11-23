@@ -69,7 +69,7 @@ async function CompetitionContent({ params }: { params: Promise<{ id: string }> 
             >
               <div className="flex items-center gap-3">
                 <span className="w-6 text-center font-semibold tabular-nums">{s.rank ?? "–"}</span>
-                <FaceAvatar seed={s.member_key} size={36} />
+                <FaceAvatar seed={s.member_key} config={s.avatar} size={36} />
                 <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate font-medium">
                   {s.display_name}
                   {s.is_owner ? <Crown aria-label="יוצר התחרות" className="size-3.5 shrink-0 text-ink-muted" /> : null}
@@ -125,7 +125,7 @@ function Podium({ standings, kind }: { standings: CompetitionView["standings"]; 
         return (
           <div key={p.member_key} className={`flex flex-col items-center ${first ? "-translate-y-2" : ""}`}>
             {first ? <Crown aria-hidden="true" className="mb-0.5 size-5 text-ink" /> : null}
-            <FaceWithName seed={p.member_key} name={p.display_name} size={first ? 68 : 54} note={p.score === null ? undefined : scoreLabel(kind, p.score)} highlight={p.is_me} />
+            <FaceWithName seed={p.member_key} config={p.avatar} name={p.display_name} size={first ? 68 : 54} note={p.score === null ? undefined : scoreLabel(kind, p.score)} highlight={p.is_me} />
             <span className={`mt-1 flex size-6 items-center justify-center rounded-full text-xs font-bold ${first ? "bg-accent" : "bg-surface"}`}>{p.rank ?? "–"}</span>
           </div>
         );

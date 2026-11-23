@@ -1,3 +1,4 @@
+import { parseAvatar, type AvatarConfig } from "@/lib/avatar";
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { localDay } from "@/lib/water/time";
@@ -25,6 +26,8 @@ export interface Standing {
   planned: number;
   score: number | null;
   rank: number | null;
+  /** The face the member chose at signup (null: the one from their key). */
+  avatar: AvatarConfig | null;
 }
 
 const COLS = "id, name, kind, owner_id, start_date, end_date, max_members, cancelled_at, finalized_at";
@@ -84,7 +87,7 @@ export async function loadCompetition(userId: string, id: string): Promise<Compe
   ]);
   return {
     competition,
-    standings: (standings ?? []) as Standing[],
+    standings: ((standings ?? []) as (Omit<Standing, "avatar"> & { avatar?: unknown })[]).map((s) => ({ ...s, avatar: parseAvatar(s.avatar) })),
     results: (
       (results ?? []) as {
         user_id: string;

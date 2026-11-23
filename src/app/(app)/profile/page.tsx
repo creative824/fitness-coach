@@ -9,6 +9,9 @@ import { signOut } from "@/lib/auth/actions";
 import { getProfileSummary } from "@/lib/data/profile";
 import { requireUser } from "@/lib/data/user";
 import { CalorieToggle } from "@/components/food/calorie-toggle";
+import { AvatarCard } from "@/components/profile/avatar-card";
+import { FaceAvatar } from "@/components/ui/face-avatar";
+import { avatarFromSeed, parseAvatar } from "@/lib/avatar";
 import { TelegramCard } from "@/components/telegram/telegram-card";
 import { createClient } from "@/lib/supabase/server";
 import { prizeTotal } from "@/lib/competitions/data";
@@ -36,20 +39,16 @@ async function ProfileContent() {
   const supabase = await createClient();
   const [profile, { data: prefs, error: prefsError }, { data: tgLink, error: tgError }, prizes] = await Promise.all([
     getProfileSummary(user.id),
-    supabase.from("profiles").select("calorie_tracking").eq("user_id", user.id).maybeSingle(),
+    supabase.from("profiles").select("calorie_tracking, preferences").eq("user_id", user.id).maybeSingle(),
     supabase.from("telegram_links").select("linked_at").eq("user_id", user.id).maybeSingle(),
     prizeTotal(user.id),
   ]);
+  const avatar = parseAvatar((prefs as { preferences?: { avatar?: unknown } } | null)?.preferences?.avatar);
   return (
     <>
       <Card tone="night" className="relative flex flex-col gap-5 overflow-hidden p-6">
         <div className="relative flex items-center gap-4">
-          <span
-            aria-hidden="true"
-            className="flex size-16 shrink-0 items-center justify-center rounded-full bg-accent text-2xl font-semibold text-ink"
-          >
-            {profile?.display_name?.trim().charAt(0) ?? "?"}
-          </span>
+          <FaceAvatar seed={user.id} config={avatar} size={64} />
           <div className="flex min-w-0 flex-col gap-1">
             <span className="truncate text-xl font-semibold">{profile?.display_name ?? "—"}</span>
             {!profile?.onboarding_completed_at ? (
@@ -68,6 +67,11 @@ async function ProfileContent() {
           {s.editProfile}
         </ButtonLink>
       </Card>
+      {prefsError ? null : (
+        <Card>
+          <AvatarCard initial={avatar ?? avatarFromSeed(user.id)} name={profile?.display_name ?? ""} />
+        </Card>
+      )}
       {prefsError ? null : (
         <Card>
           <CalorieToggle on={(prefs as { calorie_tracking?: boolean } | null)?.calorie_tracking !== false} />

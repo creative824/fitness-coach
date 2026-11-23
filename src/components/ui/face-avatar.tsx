@@ -4,45 +4,37 @@
  * people look different. Pure SVG, no network.
  */
 
-const BG = ["#d9f99d", "#bae6fd", "#fecdd3", "#ddd6fe", "#fde68a", "#a7f3d0", "#fed7aa", "#c7d2fe"];
-const SKIN = ["#f8d5b8", "#eab68f", "#d39a6a", "#b87a4b", "#8d5a35", "#5e3a22"];
-const SHIRT = ["#334155", "#0f766e", "#6d28d9", "#be123c", "#1d4ed8", "#a16207"];
-const HAIR = ["#1f1a17", "#3b2a20", "#6b4226", "#a0522d", "#d6a756", "#8a8a8a"];
+import { AVATAR_BG, AVATAR_HAIR, AVATAR_SHIRT, AVATAR_SKIN, avatarFromSeed, type AvatarConfig } from "@/lib/avatar";
 
-function hash(text: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
-  return h >>> 0;
-}
+const HAIR = AVATAR_HAIR;
 
-/** Picks from `n` options with a different slice of the hash each time. */
-function picker(seed: string) {
-  let h = hash(seed);
-  return (n: number) => {
-    const v = h % n;
-    h = Math.imul(h ^ (h >>> 13), 2654435761) >>> 0;
-    return v;
-  };
-}
-
-export function faceOf(seed: string) {
-  const pick = picker(seed);
+/** Colors and shapes of a face: a chosen avatar, or the one that comes from the seed. */
+export function faceOf(seed: string, config?: AvatarConfig | null) {
+  const c = config ?? avatarFromSeed(seed);
   return {
-    bg: BG[pick(BG.length)],
-    skin: SKIN[pick(SKIN.length)],
-    hair: HAIR[pick(HAIR.length)],
-    style: pick(6),
-    eyes: pick(3),
-    mouth: pick(3),
-    glasses: pick(5) === 0,
-    beard: pick(5) === 0,
-    cheeks: pick(2) === 0,
-    shirt: SHIRT[pick(SHIRT.length)],
+    ...c,
+    bg: AVATAR_BG[c.bg] ?? AVATAR_BG[0],
+    skin: AVATAR_SKIN[c.skin] ?? AVATAR_SKIN[0],
+    hair: AVATAR_HAIR[c.hair] ?? AVATAR_HAIR[0],
+    shirt: AVATAR_SHIRT[c.shirt] ?? AVATAR_SHIRT[0],
   };
 }
 
-export function FaceAvatar({ seed, size = 48, className = "", title }: { seed: string; size?: number; className?: string; title?: string }) {
-  const f = faceOf(seed);
+export function FaceAvatar({
+  seed,
+  config = null,
+  size = 48,
+  className = "",
+  title,
+}: {
+  seed: string;
+  /** The face the person chose; without one, the face comes from the seed. */
+  config?: AvatarConfig | null;
+  size?: number;
+  className?: string;
+  title?: string;
+}) {
+  const f = faceOf(seed, config);
   const eye = (cx: number) =>
     f.eyes === 0 ? (
       <circle cx={cx} cy="47" r="3" fill="#1f1a17" />
@@ -107,10 +99,24 @@ export function FaceAvatar({ seed, size = 48, className = "", title }: { seed: s
 }
 
 /** Face with the name under it, for leaderboards and member lists. */
-export function FaceWithName({ seed, name, size = 56, note, highlight = false }: { seed: string; name: string; size?: number; note?: string; highlight?: boolean }) {
+export function FaceWithName({
+  seed,
+  config = null,
+  name,
+  size = 56,
+  note,
+  highlight = false,
+}: {
+  seed: string;
+  config?: AvatarConfig | null;
+  name: string;
+  size?: number;
+  note?: string;
+  highlight?: boolean;
+}) {
   return (
     <span className="flex w-[4.75rem] flex-col items-center gap-1 text-center">
-      <FaceAvatar seed={seed} size={size} className={highlight ? "ring-2 ring-accent ring-offset-2 ring-offset-surface" : ""} />
+      <FaceAvatar seed={seed} config={config} size={size} className={highlight ? "ring-2 ring-accent ring-offset-2 ring-offset-surface" : ""} />
       <span className="line-clamp-1 w-full text-xs font-medium">{name}</span>
       {note ? <span className="num text-[11px] text-ink-muted">{note}</span> : null}
     </span>
