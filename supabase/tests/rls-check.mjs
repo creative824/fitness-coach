@@ -278,8 +278,8 @@ const LB = r.rows?.[0]?.id;
 check("a user creates a competition and becomes its owner", Boolean(LB));
 r = await as(A, `select create_leaderboard('${"x".repeat(41)}', 'habits', '${START}', '${END}', 'אורי', null)`);
 check("a competition name is at most 40 characters", Boolean(r.error));
-r = await as(A, `select create_leaderboard('x', 'weight_loss', '${START}', '${END}', 'אורי', null)`);
-check("only the safe competition kinds exist", Boolean(r.error));
+r = await as(A, `select create_leaderboard('x', 'fasting', '${START}', '${END}', 'אורי', null)`);
+check("only the known competition kinds exist", Boolean(r.error));
 r = await as(A, `select create_leaderboard('x', 'habits', '${START}', '${addDays(START, 120)}', 'אורי', null)`);
 check("a competition lasts at most 90 days", Boolean(r.error));
 
@@ -343,6 +343,36 @@ r = await as(extra[0], `select prize_points from leaderboard_results where leade
 check("a member who did nothing gets no prize", r.rows?.[0]?.prize_points === 0);
 r = await as(extra[0], `select join_leaderboard('${CODE}', 'late')`);
 check("an ended competition cannot be joined", Boolean(r.error) || r.rows?.[0]?.join_leaderboard === null);
+
+// ── diet competitions (0010) ──
+const W1 = "44444444-4444-4444-4444-000000000001";
+const W2 = "44444444-4444-4444-4444-000000000002";
+const W3 = "44444444-4444-4444-4444-000000000003";
+const WCODE = "e".repeat(64);
+await db.exec(`insert into auth.users (id) values ('${W1}'), ('${W2}'), ('${W3}');
+  insert into public.profiles (user_id, display_name, safety_flags)
+    values ('${W3}', 'w3', '{"result": {"restrictions": {"noWeightLossGoal": true, "hideWeightTracking": true}}}');`);
+r = await as(W1, `select create_leaderboard('דיאטה', 'weight_loss', '${TD}', '${addDays(TD, 29)}', 'דנה', '${WCODE}') as id`);
+const WL = r.rows?.[0]?.id;
+check("a diet competition can be created", Boolean(WL));
+r = await as(W3, `select create_leaderboard('x', 'weight_loss', '${TD}', '${addDays(TD, 13)}', 'x', null)`);
+check("someone whose health answers rule out weight loss cannot open a diet competition", /not suitable/.test(r.error ?? ""));
+r = await as(W3, `select join_leaderboard('${WCODE}', 'x') as id`);
+check("someone whose health answers rule out weight loss cannot join one", /not suitable/.test(r.error ?? ""));
+r = await as(W2, `select join_leaderboard('${WCODE}', 'יוסי') as id`);
+check("others join a diet competition with the code", r.rows?.[0]?.id === WL);
+r = await as(W2, `select score from leaderboard_standings('${WL}') where is_me`);
+check("no score before two weigh-ins", r.rows?.[0]?.score === null);
+await db.exec(`update leaderboards set start_date = '${addDays(TD, -27)}' where id = '${WL}';
+  update leaderboard_members set joined_at = now() - interval '27 days' where leaderboard_id = '${WL}';
+  insert into weight_logs (user_id, date, weight_kg) values
+    ('${W1}', '${addDays(TD, -27)}', 100), ('${W1}', '${addDays(TD, -1)}', 92),
+    ('${W2}', '${addDays(TD, -30)}', 80), ('${W2}', '${addDays(TD, -1)}', 78.4);`);
+r = await as(W2, `select display_name, score, rank from leaderboard_standings('${WL}') order by rank`);
+check("the score is the percent of own weight lost, in tenths", r.rows?.find((x) => x.display_name === "יוסי")?.score === 20);
+check("only a healthy pace counts: 8% in 4 weeks is capped at 1% a week", r.rows?.find((x) => x.display_name === "דנה")?.score === 40 && r.rows[0].display_name === "דנה");
+r = await as(W2, `select * from leaderboard_standings('${WL}')`);
+check("members see percents, never kilograms", r.rows?.length === 2 && !Object.keys(r.rows[0]).some((k) => /kg|weight/.test(k)));
 
 console.log(failed ? `\n${failed} check(s) failed` : "\nAll RLS checks passed");
 process.exit(failed ? 1 : 0);
