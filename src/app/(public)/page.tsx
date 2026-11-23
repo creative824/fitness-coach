@@ -60,6 +60,9 @@ export default function LandingPage() {
                 {t.landing.ctaLogin}
               </ButtonLink>
             </div>
+            <a href="/demo" className="w-fit text-sm font-medium underline underline-offset-4">
+              או לנסות קודם בלי הרשמה
+            </a>
           </div>
           <HeroPreview />
         </section>

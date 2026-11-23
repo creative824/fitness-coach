@@ -20,7 +20,29 @@ const SLOT_DOT: Record<SlotView["type"], string> = {
  * can be swapped for another of the same calories, or the whole menu at once. "Ate it" logs the
  * meal; "I ate something else" takes free text and estimates it.
  */
-export function MenuCard({ initial, showNumbers, saved, aiEnabled }: { initial: MenuView; showNumbers: boolean; saved: boolean; aiEnabled: boolean }) {
+/** What the card does on a tap. The app uses the server actions; the demo passes local ones. */
+export interface MenuApi {
+  eat: (index: number, eaten: boolean) => Promise<MenuResult>;
+  swap: (index: number) => Promise<MenuResult>;
+  swapAll: () => Promise<MenuResult>;
+  other: (input: Parameters<typeof logOtherFood>[0]) => Promise<MenuResult>;
+}
+
+const SERVER_API: MenuApi = { eat: setMealEaten, swap: swapMeal, swapAll: swapWholeMenu, other: logOtherFood };
+
+export function MenuCard({
+  initial,
+  showNumbers,
+  saved,
+  aiEnabled,
+  api = SERVER_API,
+}: {
+  initial: MenuView;
+  showNumbers: boolean;
+  saved: boolean;
+  aiEnabled: boolean;
+  api?: MenuApi;
+}) {
   const { setEatenKcal } = useDay();
   const [menu, setMenu] = useState(initial);
   const [open, setOpen] = useState<number | null>(null);
@@ -71,7 +93,7 @@ export function MenuCard({ initial, showNumbers, saved, aiEnabled }: { initial: 
         {saved ? (
           <button
             type="button"
-            onClick={() => apply("all", swapWholeMenu)}
+            onClick={() => apply("all", api.swapAll)}
             disabled={busy !== null || eatenCount === menu.slots.length}
             className="inline-flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl bg-field px-3 text-sm font-medium transition-colors hover:bg-line/60 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -98,12 +120,12 @@ export function MenuCard({ initial, showNumbers, saved, aiEnabled }: { initial: 
             saved={saved}
             busy={busy}
             onEat={() =>
-              apply(`eat:${s.index}`, () => setMealEaten(s.index, !s.eaten), (m) => ({
+              apply(`eat:${s.index}`, () => api.eat(s.index, !s.eaten), (m) => ({
                 ...m,
                 slots: m.slots.map((x) => (x.index === s.index ? { ...x, eaten: !x.eaten, instead: x.eaten ? null : x.instead } : x)),
               }))
             }
-            onSwap={() => apply(`swap:${s.index}`, () => swapMeal(s.index))}
+            onSwap={() => apply(`swap:${s.index}`, () => api.swap(s.index))}
           />
         ))}
       </ul>
@@ -121,6 +143,7 @@ export function MenuCard({ initial, showNumbers, saved, aiEnabled }: { initial: 
             aiEnabled={aiEnabled}
             showNumbers={showNumbers}
             saved={saved}
+            onLog={api.other}
             onClose={() => setOther(false)}
             onSaved={(r) => {
               setMenu(r.menu);
@@ -268,6 +291,7 @@ function OtherFood({
   aiEnabled,
   showNumbers,
   saved,
+  onLog,
   onClose,
   onSaved,
 }: {
@@ -275,6 +299,7 @@ function OtherFood({
   aiEnabled: boolean;
   showNumbers: boolean;
   saved: boolean;
+  onLog: MenuApi["other"];
   onClose: () => void;
   onSaved: (r: Extract<MenuResult, { ok: true }>) => void;
 }) {
@@ -290,7 +315,7 @@ function OtherFood({
     const clientRef = ref.current;
     setNote(null);
     startSave(async () => {
-      const r = await logOtherFood({ text: entry.text, items: entry.items, estimated: entry.items.length > 0, slot, clientRef }).catch((): MenuResult => ({ ok: false }));
+      const r = await onLog({ text: entry.text, items: entry.items, estimated: entry.items.length > 0, slot, clientRef }).catch((): MenuResult => ({ ok: false }));
       if (r.ok) onSaved(r);
       else setNote("השמירה לא הצליחה. נסו שוב.");
     });

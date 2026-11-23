@@ -65,12 +65,15 @@ export function FitnessCard({
   initial,
   weightKg,
   saved,
+  demo = false,
 }: {
   workout: { title: string; minutes: number; blocks: WorkoutBlock[] } | null;
   tasks: SmallTask[];
   initial: FitnessState;
   weightKg: number | null;
   saved: boolean;
+  /** Keep changes in the page only (the demo without an account). */
+  demo?: boolean;
 }) {
   const { setWorkout, setActiveMinutes } = useDay();
   const [fit, setFit] = useState(initial);
@@ -90,6 +93,7 @@ export function FitnessCard({
     const prev = fit;
     setFit(next);
     setError(false);
+    if (demo) return;
     start(async () => {
       const r = await call().catch((): FitnessResult => ({ ok: false }));
       if (r.ok) setFit(r.fitness);
