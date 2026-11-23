@@ -23,7 +23,7 @@ import { generateWeekPlan, loadDayTasks, loadWeek } from "@/lib/plan/data";
 import { PER_SIDE } from "@/lib/plan/duration";
 import { addDays, weekdayOf, weekStartOf } from "@/lib/plan/week";
 import { bmiOf } from "@/lib/progress/bmi";
-import { loadWeekScores } from "@/lib/progress/data";
+import { loadRecentWeights, loadWeekScores } from "@/lib/progress/data";
 import { loadWaterToday } from "@/lib/water/data";
 import { dailyWaterTargetMl } from "@/lib/water/plan";
 import { localDay } from "@/lib/water/time";
@@ -87,13 +87,14 @@ async function Today() {
     loadFoodRange(user.id, weekStart, addDays(weekStart, 6)).catch(() => ({ tracking: true, days: {} as Awaited<ReturnType<typeof loadFoodRange>>["days"] })),
     loadWeekScores(user.id, weekStart).catch(() => null),
     loadDayLogRange(user.id, weekStart, addDays(weekStart, 6)).catch(() => new Map()),
+    ctx.hideWeight ? Promise.resolve([]) : loadRecentWeights(user.id, date).catch(() => []),
   ]);
   // The week's plan is made on its own the first time the week is opened.
   if (!week) {
     const made = await generateWeekPlan(user.id, weekStart).catch(() => null);
     if (made?.ok) [week, tasks] = await Promise.all([loadWeek(user.id, weekStart).catch(() => null), tasksOf()]);
   }
-  const [day, food, water, weekFood, weekScores, weekLogs] = await rest;
+  const [day, food, water, weekFood, weekScores, weekLogs, weights] = await rest;
 
   const planDay = week?.plan.days[weekdayOf(date)];
   const w = planDay?.workout ?? null;
@@ -178,7 +179,7 @@ async function Today() {
     };
   });
 
-  const weight = ctx.hideWeight || !ctx.weightKg ? null : { kg: ctx.weightKg, bmi: bmiOf(ctx.weightKg, ctx.heightCm) };
+  const weight = ctx.hideWeight ? null : { history: weights, startKg: ctx.draft.weight_kg ?? ctx.weightKg, heightCm: ctx.heightCm, today: date };
 
   return (
     <DayProvider eatenKcal={mid(food?.totals.kcal) ?? 0} eatenProtein={food?.totals.protein ?? 0} workout={{ done: doneBlocks, total: blocks.length }} activeMinutes={day.fitness.acts.reduce((a, x) => a + x.min, 0)}>

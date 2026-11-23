@@ -11,6 +11,14 @@ export interface ProgressData {
   hideWeight: boolean;
 }
 
+/** Weigh-ins of the last `days` days, oldest first, for the today screen. */
+export async function loadRecentWeights(userId: string, today: string, days = 42): Promise<{ date: string; kg: number }[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("weight_logs").select("date, weight_kg").eq("user_id", userId).gte("date", addDays(today, -days)).order("date");
+  if (error) return [];
+  return (data ?? []).map((w) => ({ date: w.date as string, kg: Number(w.weight_kg) }));
+}
+
 /** Last 12 weeks of weight and last 14 days of tasks, read in parallel. */
 export async function loadProgress(userId: string, today: string): Promise<ProgressData> {
   const supabase = await createClient();

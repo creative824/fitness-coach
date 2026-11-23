@@ -85,7 +85,7 @@ function setupFor(p: Person) {
     goals: p.goals, experience: p.experience, activityLevel: p.activityLevel, age: p.age, bmi: bmiOf(p.weightKg, p.heightCm), weightKg: p.weightKg, sleepHours: p.sleepHours,
     lowIntensityOnly: false, needsDoctor: false, hideNumbers: false, workoutToday: blocks.length > 0, weeksIn: 0,
   }).map((t) => ({ id: t.id, kind: t.kind, title: t.title, why: t.why, minutes: t.minutes, grams: t.grams, auto: false }));
-  return { target, menu, tasks, week: sampleWeek(p.id, target), protein: proteinTarget(p.goals, p.weightKg), workout: p.workout && blocks.length ? { title: p.workout.title, minutes: p.workout.minutes, blocks } : null };
+  return { target, menu, tasks, week: sampleWeek(p.id, target), weight: sampleWeights(p), protein: proteinTarget(p.goals, p.weightKg), workout: p.workout && blocks.length ? { title: p.workout.title, minutes: p.workout.minutes, blocks } : null };
 }
 
 export function DemoDay() {
@@ -176,6 +176,14 @@ function sampleWeek(seed: string, target: number): WeekDayStat[] {
   });
 }
 
+/** Sample weigh-ins: weekly, the last one 4 days ago, so the reminder shows. */
+function sampleWeights(p: Person) {
+  const drift = p.goals.includes("lose_weight") ? -0.45 : p.goals.includes("muscle") ? 0.2 : 0.05;
+  const dates = ["2025-12-14", "2025-12-21", "2025-12-28", "2026-01-04", "2026-01-11"];
+  const history = dates.map((date, i) => ({ date, kg: Math.round((p.weightKg + drift * (i - (dates.length - 1))) * 10) / 10 }));
+  return { history, startKg: history[0].kg, heightCm: p.heightCm, today: "2026-01-15" };
+}
+
 const ok = (menu: DayMenu, profile: DietProfile, eaten: { kcal: number; protein: number }): MenuResult => ({
   ok: true,
   menu: toView(menu, profile),
@@ -232,7 +240,7 @@ function PersonDay({ person }: { person: Person }) {
   return (
     <DayProvider eatenKcal={0} workout={{ done: 0, total: setup.workout?.blocks.length ?? 0 }} activeMinutes={0}>
       <DemoCompetition you={person.label} />
-      <StatusCard target={setup.target} showNumbers week={setup.week} water={null} weight={{ kg: person.weightKg, bmi: bmiOf(person.weightKg, person.heightCm) }} proteinTarget={setup.protein} />
+      <StatusCard target={setup.target} showNumbers week={setup.week} water={null} weight={setup.weight} localWeight proteinTarget={setup.protein} />
       <MenuCard initial={toView(setup.menu, person.diet)} showNumbers saved aiEnabled={false} api={api} />
       <FitnessCard workout={setup.workout} tasks={setup.tasks} initial={{ done: [], acts: [] }} weightKg={person.weightKg} saved demo />
       <DemoDiary
@@ -316,19 +324,19 @@ const RIVALS = ["דנה", "יוסי", "מיכל", "אבי", "נועה"];
 /** A sample competition: faces with names, so the table reads like people, not a list of words. */
 function DemoCompetition({ you }: { you: string }) {
   const people = [
-    { key: "demo-dana", name: RIVALS[0], score: 92 },
-    { key: "demo-you", name: "את/ה", score: 81, me: true },
-    { key: "demo-yossi", name: RIVALS[1], score: 77 },
-    { key: "demo-michal", name: RIVALS[2], score: 64 },
-    { key: "demo-avi", name: RIVALS[3], score: 58 },
-    { key: "demo-noa", name: RIVALS[4], score: 41 },
+    { key: "demo-dana", name: RIVALS[0], score: 3.8 },
+    { key: "demo-you", name: "את/ה", score: 3.1, me: true },
+    { key: "demo-yossi", name: RIVALS[1], score: 2.6 },
+    { key: "demo-michal", name: RIVALS[2], score: 2.2 },
+    { key: "demo-avi", name: RIVALS[3], score: 1.4 },
+    { key: "demo-noa", name: RIVALS[4], score: 0.9 },
   ];
   const [first, second, third] = people;
   return (
     <section aria-labelledby="demo-comp" className="flex flex-col gap-3 rounded-[var(--radius-card)] bg-surface p-4 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
       <div className="flex items-baseline justify-between gap-2">
         <h2 id="demo-comp" className="font-semibold">
-          תחרות לדוגמה: אתגר החודש
+          תחרות דיאטה לדוגמה
         </h2>
         <span className="text-xs text-ink-muted">{you} · מקום 2</span>
       </div>
@@ -336,17 +344,18 @@ function DemoCompetition({ you }: { you: string }) {
         {[second, first, third].map((p) => (
           <div key={p.key} className={`flex flex-col items-center ${p === first ? "-translate-y-2" : ""}`}>
             {p === first ? <span aria-hidden="true">👑</span> : null}
-            <FaceWithName seed={p.key + you} name={p.name} size={p === first ? 68 : 54} note={`${p.score}%`} highlight={Boolean(p.me)} />
+            <FaceWithName seed={p.key + you} name={p.name} size={p === first ? 68 : 54} note={`${p.score.toFixed(1)}%`} highlight={Boolean(p.me)} />
           </div>
         ))}
       </div>
+      <p className="text-xs text-ink-muted">המנצח: מי שהוריד הכי הרבה אחוזים מהמשקל שלו. נספר קצב בריא בלבד, עד 1% בשבוע. אחרים רואים רק אחוזים, לא קילוגרמים.</p>
       <ol className="flex flex-col gap-1.5">
         {people.slice(3).map((p, i) => (
           <li key={p.key} className="flex items-center gap-3 rounded-xl bg-field px-3 py-2">
             <span className="num w-5 text-center text-sm font-semibold">{i + 4}</span>
             <FaceAvatar seed={p.key + you} size={32} />
             <span className="flex-1 text-sm font-medium">{p.name}</span>
-            <span className="num text-sm font-semibold">{p.score}%</span>
+            <span className="num text-sm font-semibold">{p.score.toFixed(1)}%</span>
           </li>
         ))}
       </ol>

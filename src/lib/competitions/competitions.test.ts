@@ -61,3 +61,14 @@ describe("competition rules", () => {
     expect(timeLeftLabel(b, "ended", "2026-11-20")).toBeNull();
   });
 });
+
+describe("weight-loss scores", async () => {
+  const { scoreLabel, scoreBar } = await import("./rules");
+  it("shows tenths of a percent and draws bars against the leader", () => {
+    expect(scoreLabel("weight_loss", 34)).toBe("3.4%");
+    expect(scoreLabel("habits", 80)).toBe("80%");
+    expect(scoreLabel("weight_loss", null)).toBe("–");
+    expect(scoreBar("weight_loss", 17, 34)).toBe(50);
+    expect(scoreBar("habits", 70, 90)).toBe(70);
+  });
+});

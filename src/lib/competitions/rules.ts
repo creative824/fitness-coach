@@ -3,10 +3,16 @@
  * The database computes the scores (supabase/migrations/0008_competitions.sql); this file only
  * describes them. Keep the two in step.
  */
-export const KINDS = ["consistency", "habits", "water"] as const;
+export const KINDS = ["weight_loss", "consistency", "habits", "water"] as const;
 export type Kind = (typeof KINDS)[number];
 
 export const KIND_INFO: Record<Kind, { title: string; short: string; formula: string }> = {
+  weight_loss: {
+    title: "תחרות דיאטה",
+    short: "מי שהוריד הכי הרבה אחוזים מהמשקל שלו",
+    formula:
+      "הציון הוא אחוז הירידה מהמשקל של כל אחד: מהשקילה בתחילת התחרות עד השקילה האחרונה. כך מי ששוקל 100 ק״ג ומי ששוקל 60 מתחרים בתנאים שווים. נספר רק קצב בריא, עד 1% בשבוע, כך שדיאטת כאסח לא נותנת יתרון. צריך לפחות שתי שקילות. אחרים רואים רק את האחוז, אף פעם לא את המשקל.",
+  },
   consistency: {
     title: "התמדה באימונים",
     short: "מי שמשלים את האימונים שבתוכנית שלו",
@@ -33,6 +39,19 @@ export const SHARED_RULES = [
 ];
 
 export const PRIZES = [100, 60, 30];
+
+/** The score as shown: percent of tasks, or percent of body weight lost (kept in tenths). */
+export function scoreLabel(kind: Kind, score: number | null): string {
+  if (score === null) return "–";
+  return kind === "weight_loss" ? `${(score / 10).toFixed(1)}%` : `${score}%`;
+}
+
+/** Width of a score bar, 0–100. Weight loss is drawn against the leader. */
+export function scoreBar(kind: Kind, score: number | null, best: number | null): number {
+  if (score === null) return 0;
+  if (kind !== "weight_loss") return score;
+  return best ? Math.round((score / best) * 100) : 0;
+}
 export const MAX_MEMBERS = 20;
 export const DURATIONS = [7, 14, 30] as const;
 

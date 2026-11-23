@@ -1,11 +1,12 @@
 "use client";
 
-import { Beef, Droplet, Dumbbell, Plus, Scale } from "lucide-react";
+import { Beef, Droplet, Dumbbell, Plus } from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { calorieScore, scoreWord, taskScore, weekAverage } from "@/lib/day/scores";
 import { addWaterFill } from "@/lib/water/actions";
 import { CalorieRing } from "./calorie-ring";
+import { WeightTracker, type WeightInfo } from "./weight-tracker";
 import { fmt, useDay } from "./day-context";
 
 export interface WeekDayStat {
@@ -39,12 +40,16 @@ export function StatusCard({
   water,
   weight,
   proteinTarget = null,
+  localWeight = false,
 }: {
   target: number | null;
   showNumbers: boolean;
   week: WeekDayStat[];
   water: WaterMini | null;
-  weight: { kg: number; bmi: number | null } | null;
+  /** Weigh-ins for the weight row, or null when weight is not shown (health answers). */
+  weight: WeightInfo | null;
+  /** Keep weigh-ins in the page only (the demo). */
+  localWeight?: boolean;
   /** Grams of protein for the day, or null without a weight or with numbers hidden. */
   proteinTarget?: number | null;
 }) {
@@ -105,7 +110,7 @@ export function StatusCard({
           }
         />
       </div>
-      {tab === "day" ? <DayView proteinTarget={protein?.target ?? null} target={target} showNumbers={showNumbers} water={water} weight={weight} /> : <WeekView target={target} showNumbers={showNumbers} week={week} />}
+      {tab === "day" ? <DayView proteinTarget={protein?.target ?? null} target={target} showNumbers={showNumbers} water={water} weight={weight} localWeight={localWeight} /> : <WeekView target={target} showNumbers={showNumbers} week={week} />}
     </section>
   );
 }
@@ -150,11 +155,13 @@ function DayView({
   water,
   weight,
   proteinTarget,
+  localWeight,
 }: {
   target: number | null;
   showNumbers: boolean;
   water: WaterMini | null;
-  weight: { kg: number; bmi: number | null } | null;
+  weight: WeightInfo | null;
+  localWeight: boolean;
   proteinTarget: number | null;
 }) {
   const { eatenKcal, eatenProtein, workout, activeMinutes } = useDay();
@@ -238,29 +245,7 @@ function DayView({
         </div>
       </div>
 
-      {weight ? (
-        <Link href="/progress#weight" className="flex items-center justify-between gap-2 rounded-xl bg-white/[0.06] px-3 py-2 text-sm transition-colors hover:bg-white/10">
-          <span className="flex items-center gap-2 text-white/70">
-            <Scale aria-hidden="true" className="size-4" />
-            משקל אחרון
-          </span>
-          <span className="flex items-center gap-3">
-            <span>
-              <span className="num font-semibold">{weight.kg}</span> ק״ג
-            </span>
-            {weight.bmi ? (
-              <span dir="ltr" className="rounded-md bg-white/10 px-1.5 text-xs">
-                BMI <span className="num font-semibold">{weight.bmi}</span>
-              </span>
-            ) : null}
-          </span>
-        </Link>
-      ) : (
-        <Link href="/progress#weight" className="flex items-center justify-center gap-2 rounded-xl bg-white/[0.06] px-3 py-2 text-sm text-white/80 hover:bg-white/10">
-          <Scale aria-hidden="true" className="size-4" />
-          הכנסת משקל ומדד BMI
-        </Link>
-      )}
+      {weight ? <WeightTracker info={weight} local={localWeight} /> : null}
     </div>
   );
 }
