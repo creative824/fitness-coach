@@ -2,12 +2,29 @@
 
 import { Dices } from "lucide-react";
 import type { ReactNode } from "react";
-import { AVATAR_BG, AVATAR_HAIR, AVATAR_SHIRT, AVATAR_SKIN, EYE_STYLES, HAIR_STYLES, MOUTH_STYLES, avatarFromSeed, type AvatarConfig } from "@/lib/avatar";
+import {
+  ACCESSORIES,
+  AVATAR_BG,
+  AVATAR_EYE_COLOR,
+  AVATAR_HAIR,
+  AVATAR_SHIRT,
+  AVATAR_SKIN,
+  BROW_STYLES,
+  EYE_STYLES,
+  FACIAL_STYLES,
+  HAIR_STYLES,
+  MOUTH_STYLES,
+  avatarFromSeed,
+  type AvatarConfig,
+} from "@/lib/avatar";
 import { FaceAvatar } from "./face-avatar";
 
-const HAIR_STYLE_LABEL = ["קצר", "קצוץ", "ארוך", "קוקו", "מתולתל", "בלי"];
-const EYE_LABEL = ["נקודות", "מחייכות", "גדולות"];
-const MOUTH_LABEL = ["חיוך", "צחוק", "רגוע"];
+const HAIR_STYLE_LABEL = ["קצר", "קצוץ", "ארוך", "קוקו", "מתולתל", "בלי", "צד", "מוהוק", "גלי"];
+const EYE_LABEL = ["פקוחות", "מחייכות", "גדולות"];
+const MOUTH_LABEL = ["חיוך", "צחוק", "רגוע", "חצי חיוך"];
+const BROW_LABEL = ["רכות", "ישרות", "עבות"];
+const FACIAL_LABEL = ["בלי", "זיפים", "שפם", "זקן"];
+const ACCESSORY_LABEL = ["בלי", "עגילים", "אוזניות", "כובע"];
 
 /**
  * Build your own face: a big preview, then rows of choices (skin, hair, eyes, smile, extras,
@@ -53,6 +70,18 @@ export function AvatarEditor({ value, onChange, name }: { value: AvatarConfig; o
         ))}
       </Row>
 
+      <Row label="צבע עיניים">
+        {AVATAR_EYE_COLOR.map((c, i) => (
+          <Swatch key={c} color={c} label={`עיניים ${i + 1}`} on={value.eyeColor === i} onClick={() => set("eyeColor", i)} />
+        ))}
+      </Row>
+
+      <Row label="גבות">
+        {Array.from({ length: BROW_STYLES }, (_, i) => (
+          <FaceChoice key={i} label={BROW_LABEL[i]} on={value.brows === i} config={preview({ brows: i })} onClick={() => set("brows", i)} />
+        ))}
+      </Row>
+
       <Row label="עיניים">
         {Array.from({ length: EYE_STYLES }, (_, i) => (
           <FaceChoice key={i} label={EYE_LABEL[i]} on={value.eyes === i} config={preview({ eyes: i })} onClick={() => set("eyes", i)} />
@@ -65,9 +94,20 @@ export function AvatarEditor({ value, onChange, name }: { value: AvatarConfig; o
         ))}
       </Row>
 
-      <Row label="תוספות">
+      <Row label="זקן ושפם">
+        {Array.from({ length: FACIAL_STYLES }, (_, i) => (
+          <FaceChoice key={i} label={FACIAL_LABEL[i]} on={value.facial === i} config={preview({ facial: i, beard: false })} onClick={() => onChange({ ...value, facial: i, beard: false })} />
+        ))}
+      </Row>
+
+      <Row label="אביזרים">
+        {Array.from({ length: ACCESSORIES }, (_, i) => (
+          <FaceChoice key={i} label={ACCESSORY_LABEL[i]} on={value.accessory === i} config={preview({ accessory: i })} onClick={() => set("accessory", i)} />
+        ))}
+      </Row>
+
+      <Row label="עוד">
         <Toggle label="משקפיים" on={value.glasses} onClick={() => set("glasses", !value.glasses)} />
-        <Toggle label="זקן" on={value.beard} onClick={() => set("beard", !value.beard)} />
         <Toggle label="לחיים ורודות" on={value.cheeks} onClick={() => set("cheeks", !value.cheeks)} />
       </Row>
 
