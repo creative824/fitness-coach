@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { totalsOf, type FoodItem, type FoodTotals, type MealType } from "./items";
+import { parseFood, toFoodItem } from "./parse";
 
 export interface FoodLog {
   id: string;
@@ -11,6 +12,8 @@ export interface FoodLog {
   source: "web" | "telegram";
   loggedAt: string;
   items: FoodItem[];
+  /** The items were counted now from the text, because the log was saved without numbers. */
+  inferred: boolean;
 }
 
 export interface FoodDay {
@@ -39,8 +42,20 @@ type Row = {
 
 const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 
+/**
+ * Meals saved without calories (before the food database, or when the AI was unavailable) are
+ * counted from their text, so every meal adds to the day.
+ */
+function withCalories(log: FoodLog): FoodLog {
+  if (log.items.some((i) => i.kcal_min !== null)) return log;
+  const parsed = parseFood(log.text).items;
+  if (!parsed.length) return log;
+  return { ...log, inferred: true, items: parsed.map(toFoodItem) };
+}
+
 function toLog(r: Row): FoodLog {
-  return {
+  return withCalories({
+    inferred: false,
     id: r.id,
     mealType: r.meal_type,
     text: r.free_text,
@@ -62,7 +77,7 @@ function toLog(r: Row): FoodLog {
         carbs_g: n(i.carbs_g),
         fat_g: n(i.fat_g),
       })),
-  };
+  });
 }
 
 const EMPTY: FoodTotals = { kcal: null, protein: null, carbs: null, fat: null, missing: 0 };

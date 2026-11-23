@@ -21,17 +21,38 @@ export const SLOT_LABEL: Record<SlotType, string> = {
   dinner: "ארוחת ערב",
 };
 
-/** Slots and calorie shares (percent) by meals per day. Fewer than 3 meals still gets 3. */
+/**
+ * Slots and calorie shares (percent). Every day has the three meals and two between-meal
+ * snacks (morning and afternoon); six meals a day adds an evening snack.
+ */
 const LAYOUTS: Record<number, [SlotType, number][]> = {
-  3: [["breakfast", 30], ["lunch", 40], ["dinner", 30]],
-  4: [["breakfast", 25], ["snack", 10], ["lunch", 35], ["dinner", 30]],
   5: [["breakfast", 25], ["snack", 10], ["lunch", 30], ["snack", 10], ["dinner", 25]],
   6: [["breakfast", 20], ["snack", 10], ["lunch", 30], ["snack", 10], ["dinner", 20], ["snack", 10]],
 };
 
 export function layoutFor(mealsPerDay: number | null | undefined): [SlotType, number][] {
-  const n = Math.min(6, Math.max(3, mealsPerDay ?? 5));
-  return LAYOUTS[n];
+  return LAYOUTS[(mealsPerDay ?? 5) >= 6 ? 6 : 5];
+}
+
+/** "ארוחת ביניים · בוקר" etc.: a snack is named by the meal before it. */
+export function slotLabels(types: SlotType[]): string[] {
+  return types.map((t, i) => {
+    if (t !== "snack") return SLOT_LABEL[t];
+    const before = types.slice(0, i).reverse().find((x) => x !== "snack");
+    const when = before === "breakfast" ? "בוקר" : before === "lunch" ? "אחה״צ" : before === "dinner" ? "ערב" : null;
+    return when ? `ארוחת ביניים · ${when}` : SLOT_LABEL.snack;
+  });
+}
+
+/** Matches the slots of an older menu to a layout by kind and order, so eaten meals stay put. */
+export function alignToLayout(old: MenuSlot[], layout: [SlotType, number][]): (MenuSlot | undefined)[] {
+  const used = new Set<number>();
+  return layout.map(([type]) => {
+    const k = old.findIndex((s, i) => !used.has(i) && s.type === type);
+    if (k < 0) return undefined;
+    used.add(k);
+    return old[k];
+  });
 }
 
 export interface DietProfile {
@@ -57,7 +78,8 @@ export interface MenuSlot {
 }
 
 export interface DayMenu {
-  v: 1;
+  /** 2: the layout with between-meal snacks. Menus saved as 1 are rebuilt around what was eaten. */
+  v: 1 | 2;
   target: number;
   seed: number;
   slots: MenuSlot[];
@@ -265,7 +287,7 @@ export interface BuildInput {
   profile: DietProfile;
   seed: number;
   /** Slots of an earlier version of the day. Eaten ones are kept as they are. */
-  keep?: MenuSlot[];
+  keep?: (MenuSlot | undefined)[];
 }
 
 export function buildMenu({ target, mealsPerDay, profile, seed, keep = [] }: BuildInput): DayMenu {
@@ -279,7 +301,7 @@ export function buildMenu({ target, mealsPerDay, profile, seed, keep = [] }: Bui
     if (main) used.add(`food:${main}`);
   };
   const isUsed = (m: MenuMeal) => used.has(m.slug) || used.has(`food:${m.parts[0]?.food}`);
-  keep.forEach((k) => k.eaten && use(k.meal));
+  keep.forEach((k) => k?.eaten && use(k.meal));
 
   let carry = 0;
   const slots: MenuSlot[] = layout.map(([type, share], i) => {
@@ -298,7 +320,7 @@ export function buildMenu({ target, mealsPerDay, profile, seed, keep = [] }: Bui
     carry = kcal - actual;
     return { type, kcal, meal: meal.slug, eaten: null };
   });
-  return { v: 1, target, seed, slots: slots.filter((s) => s.meal) };
+  return { v: 2, target, seed, slots: slots.filter((s) => s.meal) };
 }
 
 /** The next option for one slot, at the same calories. Meals used elsewhere today are skipped. */
@@ -327,7 +349,16 @@ export function optionPosition(menu: DayMenu, index: number, profile: DietProfil
 
 /** A new menu for the day, keeping what was already eaten. */
 export function reshuffle(menu: DayMenu, input: Omit<BuildInput, "seed" | "keep">, seed: number): DayMenu {
-  return buildMenu({ ...input, seed, keep: menu.slots });
+  return buildMenu({ ...input, seed, keep: alignToLayout(menu.slots, layoutFor(input.mealsPerDay)) });
+}
+
+/**
+ * A menu saved before snacks were part of every day, or for an older calorie target, rebuilt
+ * around the meals already eaten.
+ */
+export function upgradeMenu(menu: DayMenu, input: Omit<BuildInput, "seed" | "keep">): DayMenu {
+  if (menu.v === 2 && menu.target === input.target && menu.slots.length === layoutFor(input.mealsPerDay).length) return menu;
+  return reshuffle(menu, input, menu.seed);
 }
 
 export function seedFrom(text: string): number {

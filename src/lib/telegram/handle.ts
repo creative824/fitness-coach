@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { estimateMeal } from "@/lib/food/estimate";
+import { estimateText } from "@/lib/food/estimate-text";
 import { DAILY_ESTIMATE_LIMIT } from "@/lib/food/limits";
 import { totalsOf, type FoodItem } from "@/lib/food/items";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -243,13 +243,16 @@ function itemLine(i: FoodItem, numbers: boolean) {
 
 async function logFood(db: SupabaseClient, userId: string, chatId: number, date: string, text: string) {
   const numbers = await tracking(db, userId);
-  // Over the daily AI limit the meal is still saved, just without an estimate.
-  const quota = numbers
-    ? await db.rpc("take_ai_quota_as", { p_user: userId, p_kind: "food_estimate", p_limit: DAILY_ESTIMATE_LIMIT })
+  // The food database counts most meals; the AI (and its daily quota) is asked only about
+  // words the database does not know. Over the limit the meal is saved with what is known.
+  const est = numbers
+    ? await estimateText(text, async () => {
+        const quota = await db.rpc("take_ai_quota_as", { p_user: userId, p_kind: "food_estimate", p_limit: DAILY_ESTIMATE_LIMIT });
+        return quota.data !== false;
+      })
     : null;
-  const est = numbers && quota?.data !== false ? await estimateMeal(text) : null;
-  if (est && !est.ok && est.reason === "not_food") return send(chatId, `לא בטוח שהבנתי. ${HELP}`);
-  const items = est?.ok ? est.items : [];
+  if (est?.notFood) return send(chatId, `לא בטוח שהבנתי. ${HELP}`);
+  const items = est?.items ?? [];
   const { data: id, error } = await db.rpc("save_food_log_as", {
     p_user: userId,
     p_date: date,
@@ -267,7 +270,7 @@ async function logFood(db: SupabaseClient, userId: string, chatId: number, date:
         "זה מה שהבנתי:",
         ...items.map((i) => itemLine(i, numbers)),
         ...(numbers && t.kcal ? ["", `סה״כ בערך ${t.kcal[0]}–${t.kcal[1]} קלוריות (הערכה בלבד).`] : []),
-        ...(est?.ok && est.question ? ["", `❓ ${est.question}`, "אפשר לשלוח שוב עם הפרט הזה, או לתקן באתר."] : []),
+        ...(est?.unknown.length ? ["", `לא זיהיתי: ${est.unknown.join(", ")}. אפשר להוסיף באתר.`] : []),
       ]
     : [`רשמתי: "${text}".`, numbers ? "את הפריטים אפשר להוסיף באתר." : ""];
   return send(chatId, lines.filter((l, i, a) => l || a[i - 1]).join("\n").trim(), [

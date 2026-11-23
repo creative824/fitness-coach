@@ -1,10 +1,9 @@
 "use client";
 
-import { Check, ChevronDown, Loader2, Pencil, RefreshCw, Shuffle, Sparkles, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, Pencil, RefreshCw, Shuffle, X } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
-import { analyzeFood } from "@/lib/food/actions";
-import { totalsOf, type FoodItem } from "@/lib/food/items";
+import { FoodEntry, useFoodEntry } from "@/components/food/food-entry";
 import { logOtherFood, setMealEaten, swapMeal, swapWholeMenu, type MenuResult } from "@/lib/menu/actions";
 import type { MenuView, SlotView } from "@/lib/menu/view";
 import { fmt, useDay } from "./day-context";
@@ -60,7 +59,7 @@ export function MenuCard({ initial, showNumbers, saved, aiEnabled }: { initial: 
           <span className="text-xs text-ink-muted">
             {showNumbers ? (
               <>
-                <span className="num">{fmt(menu.planned)}</span> קל׳ · {eatenCount}/{menu.slots.length} ארוחות
+                מסתכם ל-<span className="num">{fmt(menu.planned)}</span> קל׳ · {eatenCount}/{menu.slots.length} ארוחות
               </>
             ) : (
               <>
@@ -194,6 +193,9 @@ function MealRow({
               {s.instead ? <span className="rounded-full bg-field px-1.5 text-[10px]">אכלתי משהו אחר</span> : null}
             </span>
             <span className={`truncate text-[15px] leading-snug font-medium ${s.eaten ? "text-ink-muted" : ""}`}>{title}</span>
+            {s.meal && !s.instead && !open ? (
+              <span className="truncate text-xs text-ink-muted">{s.meal.items.map((it) => `${it.amount} ${it.name}`).join(" · ")}</span>
+            ) : null}
           </span>
           {showNumbers ? (
             <span className="flex shrink-0 flex-col items-end leading-none">
@@ -261,15 +263,6 @@ function MealRow({
   );
 }
 
-const MESSAGES: Record<string, string> = {
-  no_key: "ההערכה האוטומטית עוד לא הופעלה. אפשר לכתוב קלוריות משוערות בעצמך.",
-  not_food: "לא זיהיתי כאן אוכל. נסו למשל: \"2 פרוסות פיצה ופחית קולה\".",
-  bad_key: "ההערכה האוטומטית לא מצליחה להתחבר כרגע. אפשר לכתוב קלוריות משוערות בעצמך.",
-  busy: "שירות ההערכה עמוס. נסו שוב בעוד דקה, או כתבו קלוריות בעצמך.",
-  failed: "לא הצלחתי להעריך הפעם. נסו שוב או כתבו קלוריות בעצמך.",
-  limit: "הגעת למספר ההערכות להיום. אפשר לכתוב קלוריות בעצמך.",
-};
-
 function OtherFood({
   slots,
   aiEnabled,
@@ -285,42 +278,19 @@ function OtherFood({
   onClose: () => void;
   onSaved: (r: Extract<MenuResult, { ok: true }>) => void;
 }) {
-  const [text, setText] = useState("");
+  const entry = useFoodEntry();
   const [slot, setSlot] = useState<number | null>(slots[0]?.index ?? null);
-  const [items, setItems] = useState<FoodItem[] | null>(null);
-  const [manual, setManual] = useState("");
   const [note, setNote] = useState<string | null>(null);
-  const [analyzing, startAnalyze] = useTransition();
   const [saving, startSave] = useTransition();
   const ref = useRef<string | null>(null);
-
-  const totals = items ? totalsOf(items) : null;
-  const mid = totals?.kcal ? Math.round((totals.kcal[0] + totals.kcal[1]) / 2) : null;
-
-  function estimate() {
-    setNote(null);
-    startAnalyze(async () => {
-      const r = await analyzeFood(text).catch(() => ({ ok: false as const, reason: "failed" as const }));
-      if (r.ok) setItems(r.items);
-      else {
-        setItems(null);
-        setNote(MESSAGES[r.reason] ?? MESSAGES.failed);
-      }
-    });
-  }
+  const chosen = slots.find((s) => s.index === slot) ?? null;
 
   function save() {
     ref.current ??= crypto.randomUUID();
-    const kcal = Number(manual);
-    const list: FoodItem[] =
-      items ??
-      (showNumbers && manual && Number.isFinite(kcal) && kcal > 0
-        ? [{ item_name: text.slice(0, 120), quantity: null, unit: null, preparation: null, kcal_min: Math.round(kcal), kcal_max: Math.round(kcal), protein_g: null, carbs_g: null, fat_g: null, confidence: "low" }]
-        : []);
     const clientRef = ref.current;
     setNote(null);
     startSave(async () => {
-      const r = await logOtherFood({ text, items: list, estimated: Boolean(items), slot, clientRef }).catch((): MenuResult => ({ ok: false }));
+      const r = await logOtherFood({ text: entry.text, items: entry.items, estimated: entry.items.length > 0, slot, clientRef }).catch((): MenuResult => ({ ok: false }));
       if (r.ok) onSaved(r);
       else setNote("השמירה לא הצליחה. נסו שוב.");
     });
@@ -334,17 +304,7 @@ function OtherFood({
           <X aria-hidden="true" className="size-4" />
         </button>
       </div>
-      <textarea
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          setItems(null);
-        }}
-        rows={2}
-        maxLength={1000}
-        placeholder="למשל: שתי פרוסות פיצה ופחית קולה זירו"
-        className="w-full resize-none rounded-xl bg-field px-3 py-2.5 text-base outline-none ring-1 ring-transparent focus:ring-ink/20"
-      />
+      <FoodEntry entry={entry} aiEnabled={aiEnabled} showNumbers={showNumbers} autoFocus placeholder="למשל: 2 פרוסות לחם עם חביתה וקפה הפוך" />
       <fieldset className="flex flex-wrap gap-1.5">
         <legend className="mb-1.5 text-xs text-ink-muted">במקום איזו ארוחה?</legend>
         {slots.map((s) => (
@@ -364,69 +324,44 @@ function OtherFood({
           aria-pressed={slot === null}
           className={`min-h-8 cursor-pointer rounded-full px-3 text-sm transition-colors ${slot === null ? "bg-brand text-white" : "bg-field hover:bg-line/60"}`}
         >
-          תוספת לתפריט
+          תוספת מעבר לתפריט
         </button>
       </fieldset>
-
-      {showNumbers && aiEnabled ? (
-        <button
-          type="button"
-          onClick={estimate}
-          disabled={analyzing || text.trim().length < 2}
-          className="inline-flex min-h-10 w-fit cursor-pointer items-center gap-2 rounded-xl bg-field px-3 text-sm font-medium transition-colors hover:bg-line/60 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {analyzing ? <Loader2 aria-hidden="true" className="size-4 animate-spin" /> : <Sparkles aria-hidden="true" className="size-4" />}
-          כמה קלוריות זה?
-        </button>
+      {showNumbers && chosen && entry.kcal > 0 ? (
+        <p className="text-xs text-ink-muted">
+          בתפריט היו כאן <span className="num">{chosen.kcal}</span> קל׳.{" "}
+          {entry.kcal > chosen.kcal + 50 ? (
+            <>
+              זה בערך <span className="num">{entry.kcal - chosen.kcal}</span> קל׳ יותר.
+            </>
+          ) : entry.kcal < chosen.kcal - 50 ? (
+            <>
+              זה בערך <span className="num">{chosen.kcal - entry.kcal}</span> קל׳ פחות.
+            </>
+          ) : (
+            "בערך אותו דבר."
+          )}
+        </p>
       ) : null}
-
-      {items && showNumbers ? (
-        <div className="flex flex-col gap-1 rounded-xl bg-accent-soft p-3 text-sm">
-          {items.map((i, k) => (
-            <div key={k} className="flex justify-between gap-2">
-              <span>
-                {i.quantity ? <span className="num">{i.quantity} </span> : null}
-                {i.unit ? `${i.unit} ` : ""}
-                {i.item_name}
-              </span>
-              <span className="num shrink-0 text-ink-muted">{i.kcal_min === i.kcal_max ? i.kcal_min : `${i.kcal_min}–${i.kcal_max}`}</span>
-            </div>
-          ))}
-          <div className="mt-1 flex justify-between border-t border-ink/10 pt-1 font-semibold">
-            <span>בערך</span>
-            <span className="num">{mid ?? "–"} קל׳</span>
-          </div>
-        </div>
-      ) : null}
-
-      {!items && showNumbers ? (
-        <label className="flex items-center gap-2 text-sm text-ink-muted">
-          {aiEnabled ? "או כתבו בעצמכם:" : "קלוריות משוערות:"}
-          <input
-            inputMode="numeric"
-            dir="ltr"
-            value={manual}
-            onChange={(e) => setManual(e.target.value.replace(/[^\d]/g, "").slice(0, 4))}
-            placeholder="450"
-            className="num min-h-9 w-24 rounded-lg bg-field px-3 text-center text-ink outline-none ring-1 ring-transparent focus:ring-ink/20"
-          />
-        </label>
-      ) : null}
-
       {note ? (
-        <p role="status" className="text-sm text-ink-muted">
+        <p role="status" className="text-sm text-warning">
           {note}
         </p>
       ) : null}
-
       <button
         type="button"
         onClick={save}
-        disabled={!saved || saving || text.trim().length < 2}
+        disabled={!saved || saving || entry.text.trim().length < 2}
         className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl bg-brand px-5 font-medium text-white transition-colors hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-50"
       >
         {saving ? <Loader2 aria-hidden="true" className="size-4 animate-spin" /> : <Check aria-hidden="true" className="size-4" />}
-        הוספה ליומן
+        {showNumbers && entry.kcal ? (
+          <>
+            הוספה ליומן · <span className="num">{entry.kcal}</span> קל׳
+          </>
+        ) : (
+          "הוספה ליומן"
+        )}
       </button>
     </div>
   );

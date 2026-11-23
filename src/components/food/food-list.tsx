@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { confirmFoodLog, deleteFoodLog } from "@/lib/food/actions";
 import { MEAL_LABEL, totalsOf } from "@/lib/food/items";
+import { describeItem } from "@/lib/food/parse";
+import { kcalOf } from "./food-entry";
 import type { FoodLog } from "@/lib/food/data";
 
 const time = new Intl.DateTimeFormat("he-IL", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jerusalem" });
@@ -57,18 +59,18 @@ export function FoodList({ logs, tracking }: { logs: FoodLog[]; tracking: boolea
               <ul className="flex flex-col gap-0.5 text-xs text-ink-muted">
                 {l.items.map((i, k) => (
                   <li key={k} className="flex justify-between gap-2">
-                    <span>
-                      {i.item_name}
-                      {i.quantity ? ` · ${i.quantity}${i.unit ? ` ${i.unit}` : ""}` : ""}
-                    </span>
-                    {tracking && i.kcal_min !== null ? <span className="num" dir="ltr">{`${i.kcal_min}–${i.kcal_max}`}</span> : null}
+                    <span>{describeItem(i)}</span>
+                    {tracking && i.kcal_min !== null ? <span className="num shrink-0">{kcalOf(i)}</span> : null}
                   </li>
                 ))}
               </ul>
             ) : null}
             {tracking && t.kcal ? (
-              <p className="text-xs text-ink-muted">
-                הערכה: <span className="num" dir="ltr">{`${t.kcal[0]}–${t.kcal[1]}`}</span> קל׳
+              <p className="flex items-baseline justify-between text-sm">
+                <span className="text-ink-muted">{l.inferred ? "חושב מהתיאור" : "סה״כ"}</span>
+                <span>
+                  <span className="num font-semibold">{Math.round((t.kcal[0] + t.kcal[1]) / 2)}</span> קל׳
+                </span>
               </p>
             ) : null}
           </li>

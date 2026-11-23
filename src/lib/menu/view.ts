@@ -1,5 +1,5 @@
 /** What the menu card needs, computed on the server from the stored choices. Pure. */
-import { optionPosition, renderSlot, slotKcal, SLOT_LABEL, type DayMenu, type DietProfile, type RenderedMeal, type SlotType } from "./engine";
+import { optionPosition, renderSlot, slotKcal, slotLabels, type DayMenu, type DietProfile, type RenderedMeal, type SlotType } from "./engine";
 
 export interface SlotView {
   index: number;
@@ -21,10 +21,11 @@ export interface MenuView {
 }
 
 export function toView(menu: DayMenu, profile: DietProfile): MenuView {
+  const labels = slotLabels(menu.slots.map((s) => s.type));
   const slots = menu.slots.map((s, index) => ({
     index,
     type: s.type,
-    label: SLOT_LABEL[s.type],
+    label: labels[index],
     kcal: slotKcal(s),
     meal: renderSlot(s),
     eaten: Boolean(s.eaten),

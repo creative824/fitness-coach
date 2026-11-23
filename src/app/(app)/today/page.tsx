@@ -11,6 +11,7 @@ import { EmptyState, LoadingState } from "@/components/ui/states";
 import { EXERCISES } from "@/content/exercises";
 import { competitionCards } from "@/lib/competitions/data";
 import { loadDayContext } from "@/lib/day/context";
+import { smartTasks } from "@/lib/day/smart-tasks";
 import { requireUser } from "@/lib/data/user";
 import { loadFoodDay, loadFoodRange } from "@/lib/food/data";
 import { getDictionary } from "@/lib/i18n/he";
@@ -116,11 +117,28 @@ async function Today() {
   const workout = w && blocks.length ? { title: w.title, minutes: w.estimated_minutes, blocks } : null;
   const doneBlocks = blocks.filter((b) => day.fitness.done.includes(`ex:${b.index}`)).length;
 
-  const small: SmallTask[] = tasks.tasks.flatMap((x) =>
-    x.type === "movement" || x.type === "recovery" || x.type === "habit"
-      ? [{ id: x.id, type: x.type, title: x.title, done: x.status !== "pending" && x.status !== "skipped" }]
-      : [],
-  );
+  const confirmedMeals = food?.logs.filter((l) => l.status === "confirmed").length ?? 0;
+  const small: SmallTask[] = smartTasks({
+    goals: ctx.draft.goals,
+    experience: ctx.draft.experience,
+    activityLevel: ctx.draft.activity_level,
+    age: ctx.draft.age,
+    bmi: bmiOf(ctx.weightKg, ctx.heightCm),
+    weightKg: ctx.weightKg,
+    sleepHours: ctx.draft.sleep_hours,
+    lowIntensityOnly: ctx.lowIntensityOnly,
+    needsDoctor: ctx.needsDoctor,
+    hideNumbers: !ctx.showNumbers,
+    workoutToday: Boolean(workout),
+    weeksIn: ctx.weeksIn,
+  }).map((t) => ({
+    id: t.id,
+    kind: t.kind,
+    title: t.title,
+    why: t.why,
+    minutes: t.minutes,
+    auto: (t.kind === "log_food" && confirmedMeals >= 3) || (t.kind === "protein" && Boolean(t.grams) && (food?.totals.protein ?? 0) >= (t.grams ?? 0)),
+  }));
 
   const waterTask = tasks.tasks.find((x) => x.type === "water") ?? null;
   const waterTarget = water

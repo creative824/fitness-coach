@@ -49,7 +49,13 @@ export async function syncWorkoutTask(supabase: SupabaseClient, userId: string, 
 
 /** Any general activity of 10 minutes or more completes the day's movement task. */
 export async function syncMovementTask(supabase: SupabaseClient, userId: string, date: string, active: boolean) {
-  const [task] = await dayTasks(supabase, userId, date, "movement");
+  await syncHabitTask(supabase, userId, date, "movement", active);
+}
+
+/** A smart task done on the today screen completes the plan's task of the same kind (scored in competitions). */
+export async function syncHabitTask(supabase: SupabaseClient, userId: string, date: string, type: "movement" | "recovery" | "habit", done: boolean) {
+  const [task] = await dayTasks(supabase, userId, date, type);
   if (!task) return;
-  if (active && task.status === "pending") await setOutcome(supabase, task.id, "done");
+  if (done && task.status === "pending") await setOutcome(supabase, task.id, "done");
+  if (!done && task.status === "done") await setOutcome(supabase, task.id, "pending");
 }

@@ -4,6 +4,8 @@ import { z } from "zod";
 import { loadDayContext } from "@/lib/day/context";
 import { syncMealTask } from "@/lib/day/tasks";
 import { requireUser } from "@/lib/data/user";
+import { loadFoodDay } from "@/lib/food/data";
+import { estimateText } from "@/lib/food/estimate-text";
 import { foodItemSchema, totalsOf } from "@/lib/food/items";
 import { createClient } from "@/lib/supabase/server";
 import { localDay } from "@/lib/water/time";
@@ -37,18 +39,11 @@ async function withMenu(change: (menu: DayMenu, ctx: Awaited<ReturnType<typeof l
   return { ok: true, menu: toView(next, ctx.profile), eatenKcal: await eatenToday(user.id, date) };
 }
 
-/** Calories of today's confirmed food logs, middle of each range. */
+/** Calories of today's confirmed food logs, middle of each range (meals saved without numbers are counted from their text). */
 async function eatenToday(userId: string, date: string): Promise<number> {
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("food_logs")
-    .select("food_log_items(kcal_min, kcal_max, protein_g, carbs_g, fat_g)")
-    .eq("user_id", userId)
-    .eq("date", date)
-    .eq("status", "confirmed");
-  const items = (data ?? []).flatMap((r) => (r as { food_log_items: Parameters<typeof totalsOf>[0] }).food_log_items ?? []);
-  const t = totalsOf(items.map((i) => ({ ...i, kcal_min: i.kcal_min === null ? null : Number(i.kcal_min), kcal_max: i.kcal_max === null ? null : Number(i.kcal_max) })));
-  return t.kcal ? Math.round((t.kcal[0] + t.kcal[1]) / 2) : 0;
+  const day = await loadFoodDay(userId, date).catch(() => null);
+  const k = day?.totals.kcal;
+  return k ? Math.round((k[0] + k[1]) / 2) : 0;
 }
 
 const index = z.int().min(0).max(7);
@@ -133,7 +128,8 @@ export async function logOtherFood(input: z.input<typeof otherSchema>): Promise<
     const slot = d.slot === null ? null : menu.slots[d.slot];
     if (slot?.eaten) return null;
     const numbers = ctx.showNumbers;
-    const items = d.items.map((it) => (numbers ? it : { ...it, kcal_min: null, kcal_max: null, protein_g: null, carbs_g: null, fat_g: null, confidence: null }));
+    const counted = d.items.length || !numbers ? d.items : (await estimateText(d.text, async () => false)).items;
+    const items = counted.map((it) => (numbers ? it : { ...it, kcal_min: null, kcal_max: null, protein_g: null, carbs_g: null, fat_g: null, confidence: null }));
     const { minutes } = localDay(new Date());
     const mealType = slot ? FOOD_MEAL[slot.type] : minutes < 11 * 60 ? "breakfast" : minutes < 16 * 60 ? "lunch" : minutes >= 18 * 60 ? "dinner" : "snack";
     const { data, error } = await supabase.rpc("save_food_log", {
@@ -143,7 +139,7 @@ export async function logOtherFood(input: z.input<typeof otherSchema>): Promise<
       p_status: "confirmed",
       p_source: "web",
       p_client_ref: d.clientRef,
-      p_estimated: d.estimated && numbers,
+      p_estimated: (d.estimated || counted !== d.items) && numbers,
       p_items: items,
     });
     if (error) {

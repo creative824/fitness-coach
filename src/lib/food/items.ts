@@ -11,7 +11,7 @@ export const MEAL_LABEL: Record<MealType, string> = {
   breakfast: "ארוחת בוקר",
   lunch: "ארוחת צהריים",
   dinner: "ארוחת ערב",
-  snack: "נשנוש",
+  snack: "ארוחת ביניים",
 };
 export const CONFIDENCE_LABEL = { low: "ודאות נמוכה", medium: "ודאות בינונית", high: "ודאות גבוהה" } as const;
 export type Confidence = keyof typeof CONFIDENCE_LABEL;

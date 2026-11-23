@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { syncMovementTask, syncWorkoutTask } from "@/lib/day/tasks";
+import { syncHabitTask, syncMovementTask, syncWorkoutTask } from "@/lib/day/tasks";
 import { requireUser } from "@/lib/data/user";
 import { loadDayLog, type FitnessState } from "@/lib/menu/data";
 import { createClient } from "@/lib/supabase/server";
@@ -58,4 +58,19 @@ export async function addActivity(kind: string, min: number): Promise<FitnessRes
 export async function removeActivity(id: string): Promise<FitnessResult> {
   if (typeof id !== "string" || id.length > 40) return { ok: false };
   return withFitness((f) => ({ ...f, acts: f.acts.filter((a) => a.id !== id) }));
+}
+
+const smartInput = z.object({ id: z.string().regex(/^[a-z_]{2,20}$/), done: z.boolean(), type: z.enum(["movement", "recovery", "habit"]) });
+
+/** Marks one of the day's smart tasks done or not; a done task also completes the plan task of its kind. */
+export async function setSmartTaskDone(id: string, done: boolean, type: "movement" | "recovery" | "habit"): Promise<FitnessResult> {
+  const p = smartInput.safeParse({ id, done, type });
+  if (!p.success) return { ok: false };
+  const key = `t:${p.data.id}`;
+  return withFitness(
+    (f) => ({ ...f, done: p.data.done ? [...new Set([...f.done, key])] : f.done.filter((k) => k !== key) }),
+    async (_f, userId, date) => {
+      await syncHabitTask(await createClient(), userId, date, p.data.type, p.data.done);
+    },
+  );
 }
