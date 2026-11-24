@@ -18,6 +18,14 @@ interface DayState {
   /** Exercises and small daily tasks done, for the tasks score. */
   actions: { done: number; total: number };
   setActions: (a: { done: number; total: number }) => void;
+  /** The small daily tasks, split for the daily score: movement tasks count for fitness. */
+  tasks: { moves: Count; other: Count };
+  setTasks: (t: { moves: Count; other: Count }) => void;
+}
+
+export interface Count {
+  done: number;
+  total: number;
 }
 
 const Ctx = createContext<DayState | null>(null);
@@ -40,6 +48,7 @@ export function DayProvider({
   const [w, setW] = useState(workout);
   const [mins, setMins] = useState(activeMinutes);
   const [actions, setActions] = useState({ done: 0, total: 0 });
+  const [tasks, setTasks] = useState({ moves: { done: 0, total: 0 }, other: { done: 0, total: 0 } });
   return (
     <Ctx.Provider
       value={{
@@ -53,6 +62,8 @@ export function DayProvider({
         setActiveMinutes: setMins,
         actions,
         setActions,
+        tasks,
+        setTasks,
       }}
     >
       {children}

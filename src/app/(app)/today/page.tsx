@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { ArrowLeft, ClipboardList } from "lucide-react";
+import { ArrowLeft, ClipboardList, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { FaceAvatar } from "@/components/ui/face-avatar";
@@ -8,25 +8,25 @@ import { CompetitionsStrip } from "@/components/home/competitions-strip";
 import { DayProvider } from "@/components/home/day-context";
 import { FitnessCard, type SmallTask, type WorkoutBlock } from "@/components/home/fitness-card";
 import { MenuCard } from "@/components/home/menu-card";
-import { StatusCard, type WeekDayStat } from "@/components/home/status-card";
+import { DaySummary } from "@/components/home/day-summary";
+import { DayExtras } from "@/components/home/day-extras";
 import { ButtonLink } from "@/components/ui/button";
 import { EmptyState, LoadingState } from "@/components/ui/states";
 import { EXERCISES } from "@/content/exercises";
 import { competitionCards } from "@/lib/competitions/data";
 import { loadDayContext } from "@/lib/day/context";
-import { countActions } from "@/lib/day/actions-count";
-import { calorieScore, proteinTarget, taskScore } from "@/lib/day/scores";
+import { proteinTarget } from "@/lib/day/scores";
 import { smartTasks, type SmartTaskInput } from "@/lib/day/smart-tasks";
 import { requireUser } from "@/lib/data/user";
-import { loadFoodDay, loadFoodRange } from "@/lib/food/data";
+import { loadFoodDay } from "@/lib/food/data";
 import { getDictionary } from "@/lib/i18n/he";
-import { loadDayLog, loadDayLogRange } from "@/lib/menu/data";
+import { loadDayLog } from "@/lib/menu/data";
 import { toView } from "@/lib/menu/view";
 import { generateWeekPlan, loadDayTasks, loadWeek } from "@/lib/plan/data";
 import { PER_SIDE } from "@/lib/plan/duration";
-import { addDays, weekdayOf, weekStartOf } from "@/lib/plan/week";
+import { weekdayOf, weekStartOf } from "@/lib/plan/week";
 import { bmiOf } from "@/lib/progress/bmi";
-import { loadRecentWeights, loadWeekScores } from "@/lib/progress/data";
+import { loadRecentWeights } from "@/lib/progress/data";
 import { loadWaterToday } from "@/lib/water/data";
 import { dailyWaterTargetMl } from "@/lib/water/plan";
 import { localDay } from "@/lib/water/time";
@@ -37,7 +37,6 @@ const s = t.screens.today;
 export const metadata: Metadata = { title: s.title };
 
 const easierName = new Map(EXERCISES.map((e) => [e.slug, e.name_he]));
-const LETTERS = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
 const longDate = new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
 
 export default function TodayPage() {
@@ -56,7 +55,7 @@ const mid = (r: [number, number] | null | undefined) => (r ? Math.round((r[0] + 
  */
 async function Today() {
   const user = await requireUser();
-  const { date } = localDay(new Date());
+  const { date, minutes } = localDay(new Date());
   const ctx = await loadDayContext(user.id);
   const name = ctx.draft.display_name;
 
@@ -87,9 +86,6 @@ async function Today() {
     loadDayLog(user.id, date),
     loadFoodDay(user.id, date).catch(() => null),
     loadWaterToday(user.id).catch(() => null),
-    loadFoodRange(user.id, weekStart, addDays(weekStart, 6)).catch(() => ({ tracking: true, days: {} as Awaited<ReturnType<typeof loadFoodRange>>["days"] })),
-    loadWeekScores(user.id, weekStart).catch(() => null),
-    loadDayLogRange(user.id, weekStart, addDays(weekStart, 6)).catch(() => new Map()),
     ctx.hideWeight ? Promise.resolve([]) : loadRecentWeights(user.id, date).catch(() => []),
   ]);
   // The week's plan is made on its own the first time the week is opened.
@@ -97,7 +93,7 @@ async function Today() {
     const made = await generateWeekPlan(user.id, weekStart).catch(() => null);
     if (made?.ok) [week, tasks] = await Promise.all([loadWeek(user.id, weekStart).catch(() => null), tasksOf()]);
   }
-  const [day, food, water, weekFood, weekScores, weekLogs, weights] = await rest;
+  const [day, food, water, weights] = await rest;
 
   const planDay = week?.plan.days[weekdayOf(date)];
   const w = planDay?.workout ?? null;
@@ -154,49 +150,18 @@ async function Today() {
     : null;
 
   const protein = ctx.showNumbers ? proteinTarget(ctx.draft.goals, ctx.weightKg) : null;
-  const weekStats: WeekDayStat[] = Array.from({ length: 7 }, (_, i) => {
-    const d = addDays(weekStart, i);
-    const wt = weekScores?.days[i]?.tasks.find((x) => x.type === "workout");
-    // Scores of the days that are over, worked out like today's.
-    const f = weekFood.days[d];
-    const kcal = mid(f?.totals.kcal);
-    const log = weekLogs.get(d);
-    const dayBlocks = week?.plan.days[i]?.workout?.blocks.length ?? 0;
-    const calScore = d < date && ctx.showNumbers ? calorieScore(kcal, ctx.target) : null;
-    const actions = countActions(smartTasks({ ...taskInput, workoutToday: dayBlocks > 0 }), dayBlocks, log?.fitness ?? { done: [], acts: [] }, {
-      meals: f?.meals ?? 0,
-      protein: f?.totals.protein ?? null,
-    });
-    const hasData = Boolean(f || log?.fitness.done.length || log?.fitness.acts.length);
-    const tScore =
-      d < date && hasData ? taskScore({ calorie: calScore, protein: protein ? { eaten: f?.totals.protein ?? 0, target: protein } : null, actions }).score : null;
-    return {
-      calorieScore: calScore,
-      taskScore: tScore,
-      date: d,
-      letter: LETTERS[i],
-      kcal: mid(weekFood.days[d]?.totals.kcal),
-      workout: !wt ? "none" : wt.status === "done" || wt.status === "swapped" ? "done" : wt.status === "partial" ? "partial" : "planned",
-      isToday: d === date,
-      future: d > date,
-    };
-  });
-
   const weight = ctx.hideWeight ? null : { history: weights, startKg: ctx.draft.weight_kg ?? ctx.weightKg, heightCm: ctx.heightCm, today: date };
 
   return (
     <DayProvider eatenKcal={mid(food?.totals.kcal) ?? 0} eatenProtein={food?.totals.protein ?? 0} workout={{ done: doneBlocks, total: blocks.length }} activeMinutes={day.fitness.acts.reduce((a, x) => a + x.min, 0)}>
       <Header name={name} date={date} seed={user.id} avatar={ctx.draft.avatar} />
       <Suspense fallback={<div className="h-[76px] animate-pulse rounded-[var(--radius-card)] bg-white/60" aria-hidden="true" />}>
-        <Competitions userId={user.id} today={date} />
+        <Competitions userId={user.id} today={date} me={{ seed: user.id, avatar: ctx.draft.avatar }} />
       </Suspense>
-      <StatusCard
-        target={ctx.target}
-        showNumbers={ctx.showNumbers}
-        week={weekStats}
+      <DaySummary target={ctx.showNumbers ? ctx.target : null} proteinTarget={protein} minutes={minutes} />
+      <DayExtras
         water={water ? { drank: water.logs.reduce((a, b) => a + b, 0), target: waterTarget, vesselMl: water.vesselMl, taskId: waterTask?.id ?? null } : null}
         weight={weight}
-        proteinTarget={protein}
       />
       <MenuCard initial={toView(day.menu, ctx.profile)} showNumbers={ctx.showNumbers} saved={day.saved} aiEnabled={Boolean(process.env.GEMINI_API_KEY)} />
       <FitnessCard workout={workout} tasks={small} initial={day.fitness} weightKg={ctx.weightKg} saved={day.saved} />
@@ -205,9 +170,9 @@ async function Today() {
 }
 
 /** Streams in on its own: one request per competition should not hold up the rest of the day. */
-async function Competitions({ userId, today }: { userId: string; today: string }) {
+async function Competitions({ userId, today, me }: { userId: string; today: string; me: { seed: string; avatar: AvatarConfig | null } }) {
   const items = await competitionCards(userId).catch(() => []);
-  return <CompetitionsStrip items={items} today={today} />;
+  return <CompetitionsStrip items={items} today={today} me={me} />;
 }
 
 function Header({ name, date, seed, avatar }: { name: string; date: string; seed: string; avatar: AvatarConfig | null }) {
@@ -217,9 +182,22 @@ function Header({ name, date, seed, avatar }: { name: string; date: string; seed
         <Link href="/profile" aria-label="הפרופיל שלי" className="shrink-0 rounded-full">
           <FaceAvatar seed={seed} config={avatar} size={44} />
         </Link>
-        <h1 className="truncate text-2xl leading-tight font-semibold">{name ? `היי ${name.trim()}` : s.title}</h1>
+        <span className="flex min-w-0 flex-col">
+          <h1 className="truncate text-2xl leading-tight font-semibold">{name ? `היי ${name.trim()}` : s.title}</h1>
+          <span className="text-xs text-ink-muted sm:hidden">{longDate.format(new Date(`${date}T12:00:00Z`))}</span>
+        </span>
       </span>
-      <span className="text-sm text-ink-muted">{longDate.format(new Date(`${date}T12:00:00Z`))}</span>
+      <span className="flex shrink-0 items-center gap-2">
+        <span className="hidden text-sm text-ink-muted sm:inline">{longDate.format(new Date(`${date}T12:00:00Z`))}</span>
+        <Link
+          href="/coach"
+          aria-label="שאלה למאמן"
+          className="flex min-h-10 items-center gap-1.5 rounded-full bg-surface px-3 text-sm font-medium shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04] hover:bg-white"
+        >
+          <MessageCircle aria-hidden="true" className="size-4" />
+          מאמן
+        </Link>
+      </span>
     </header>
   );
 }

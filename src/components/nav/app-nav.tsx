@@ -3,18 +3,19 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense } from "react";
-import { Home, LineChart, MessageCircle, Trophy, UserRound } from "lucide-react";
+import { Dumbbell, Home, LineChart, MessageCircle, Trophy, UserRound } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { getDictionary } from "@/lib/i18n/he";
 
 const t = getDictionary();
 
-/** Four places: the day, tracking, competitions and the coach. The weekly plan and the food log open from the day. */
+/** Five places, one tap each: home, tracking, fitness, competitions and the profile. The coach opens from home. */
 const items = [
   { href: "/today", label: t.nav.today, Icon: Home },
   { href: "/progress", label: t.nav.progress, Icon: LineChart },
+  { href: "/plan", label: t.nav.plan, Icon: Dumbbell },
   { href: "/competitions", label: t.nav.competitions, Icon: Trophy },
-  { href: "/coach", label: t.nav.coach, Icon: MessageCircle },
+  { href: "/profile", label: t.nav.profile, Icon: UserRound },
 ] as const;
 
 type IsActive = (href: string) => boolean;
@@ -38,28 +39,19 @@ function withPath(View: (p: { isActive: IsActive }) => React.ReactNode) {
   };
 }
 
-/** Mobile: a slim top row with the logo and the way to the profile, which left the bottom bar. */
+/** Mobile: a slim top row with the logo. The profile is in the bottom bar. */
 export const TopBar = withPath(function TopBarView({ isActive }) {
-  const active = isActive("/profile");
+  // Home has its own header with the avatar, so the logo row is only for the other screens.
+  if (isActive("/today")) return null;
   return (
     <div className="flex items-center justify-between md:hidden">
       <Logo href="/today" />
-      <Link
-        href="/profile"
-        aria-label={t.nav.profile}
-        aria-current={active ? "page" : undefined}
-        className={`flex size-10 items-center justify-center rounded-full ring-1 transition-colors ${
-          active ? "bg-night text-accent ring-night" : "bg-white/70 text-ink ring-white hover:bg-white"
-        }`}
-      >
-        <UserRound aria-hidden="true" className="size-5" />
-      </Link>
     </div>
   );
 });
 
 /**
- * Mobile: a floating graphite pill (four items). The active item opens into a lime
+ * Mobile: a floating graphite pill (five items). The active item opens into a lime
  * capsule with its label; the others are icons with accessible names. Hidden from md up.
  */
 export const BottomNav = withPath(function BottomNavView({ isActive }) {
@@ -123,14 +115,14 @@ export const SideNav = withPath(function SideNavView({ isActive }) {
           })}
         </ul>
         <Link
-          href="/profile"
-          aria-current={isActive("/profile") ? "page" : undefined}
+          href="/coach"
+          aria-current={isActive("/coach") ? "page" : undefined}
           className={`mt-auto flex min-h-11 items-center gap-3 rounded-xl px-4 font-medium transition-colors ${
-            isActive("/profile") ? "bg-night text-white" : "text-ink-muted hover:bg-white hover:text-ink"
+            isActive("/coach") ? "bg-night text-white" : "text-ink-muted hover:bg-white hover:text-ink"
           }`}
         >
-          <UserRound aria-hidden="true" className="size-5" />
-          {t.nav.profile}
+          <MessageCircle aria-hidden="true" className="size-5" />
+          {t.nav.coach}
         </Link>
       </nav>
     </div>

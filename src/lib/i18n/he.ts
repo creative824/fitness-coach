@@ -9,8 +9,8 @@ export const he = {
   appTagline: "מאמן אישי לכושר, תזונה והרגלים, שנמצא בכיס",
 
   nav: {
-    today: "היום",
-    plan: "התוכנית",
+    today: "בית",
+    plan: "כושר",
     coach: "המאמן",
     progress: "מעקב",
     profile: "פרופיל",

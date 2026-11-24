@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
+import { Beef, ChevronLeft, ChevronRight, Dumbbell, Flame } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
-import { FoodList } from "@/components/food/food-list";
-import { CalorieRing } from "@/components/home/calorie-ring";
-import { MonthGrid, tone, WeekBars, type CalorieDay } from "@/components/progress/calorie-chart";
+import { DayBars } from "@/components/progress/day-bars";
+import { FoodDiary } from "@/components/progress/food-diary";
 import { WeightCard } from "@/components/progress/weight-card";
 import { Card } from "@/components/ui/card";
-import { PageHeader } from "@/components/ui/page-header";
 import { LoadingState } from "@/components/ui/states";
 import { loadDayContext } from "@/lib/day/context";
+import { proteinTarget } from "@/lib/day/scores";
 import { requireUser } from "@/lib/data/user";
 import { loadFoodDay, loadFoodRange } from "@/lib/food/data";
+import { ACTIVITIES, type ActivityKind } from "@/lib/fitness/activities";
 import { getDictionary } from "@/lib/i18n/he";
 import { loadDayLogRange } from "@/lib/menu/data";
 import { addDays, weekStartOf } from "@/lib/plan/week";
@@ -29,6 +30,9 @@ const RANGES: [Range, string][] = [
   ["month", "חודש"],
 ];
 const monthName = new Intl.DateTimeFormat("he-IL", { month: "long", year: "numeric", timeZone: "UTC" });
+const dayName = new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+const shortDate = new Intl.DateTimeFormat("he-IL", { day: "numeric", month: "numeric", timeZone: "UTC" });
+const fmt = (n: number) => Math.round(n).toLocaleString("he-IL");
 
 export default function ProgressPage({ searchParams }: PageProps<"/progress">) {
   return (
@@ -39,9 +43,10 @@ export default function ProgressPage({ searchParams }: PageProps<"/progress">) {
 }
 
 const mid = (r: [number, number] | null | undefined) => (r ? Math.round((r[0] + r[1]) / 2) : null);
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-function rangeOf(r: Range, today: string, back: number): [string, string] {
-  if (r === "day") return [today, today];
+function rangeOf(r: Range, today: string, back: number, day: string): [string, string] {
+  if (r === "day") return [day, day];
   if (r === "week") {
     const start = addDays(weekStartOf(today), -7 * back);
     return [start, addDays(start, 6)];
@@ -52,13 +57,18 @@ function rangeOf(r: Range, today: string, back: number): [string, string] {
   return [first.toISOString().slice(0, 10), last.toISOString().slice(0, 10)];
 }
 
+/**
+ * Tracking: one day (calories, protein, activity and the food diary by meal) or a week / month
+ * (calories and protein per day, averages, workouts), and weight over time.
+ */
 async function Progress({ searchParams }: { searchParams: PageProps<"/progress">["searchParams"] }) {
   const user = await requireUser();
   const today = localDay(new Date()).date;
   const sp = await searchParams;
-  const range: Range = sp.r === "day" || sp.r === "month" ? sp.r : "week";
-  const back = sp.b === "1" && range !== "day" ? 1 : 0;
-  const [from, to] = rangeOf(range, today, back);
+  const range: Range = sp.r === "week" || sp.r === "month" ? sp.r : "day";
+  const back = range === "day" ? 0 : Math.min(24, Math.max(0, Number(sp.b) || 0));
+  const askedDay = typeof sp.d === "string" && DATE.test(sp.d) && sp.d <= today ? sp.d : today;
+  const [from, to] = rangeOf(range, today, back, askedDay);
 
   const [ctx, p, food, logs, workouts, foodDay] = await Promise.all([
     loadDayContext(user.id),
@@ -66,144 +76,56 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
     loadFoodRange(user.id, from, to).catch(() => ({ tracking: true, days: {} as Awaited<ReturnType<typeof loadFoodRange>>["days"] })),
     loadDayLogRange(user.id, from, to),
     loadWorkoutDays(user.id, from, to),
-    range === "day" ? loadFoodDay(user.id, today).catch(() => null) : Promise.resolve(null),
+    range === "day" ? loadFoodDay(user.id, askedDay).catch(() => null) : Promise.resolve(null),
   ]);
   const target = ctx.showNumbers ? ctx.target : null;
-
-  const days: CalorieDay[] = [];
-  for (let d = from; d <= to; d = addDays(d, 1)) {
-    days.push({
-      date: d,
-      kcal: mid(food.days[d]?.totals.kcal),
-      workout: workouts[d] ?? null,
-      activeMin: logs.get(d)?.fitness.acts.reduce((a, x) => a + x.min, 0) ?? 0,
-    });
-  }
-  const past = days.filter((d) => d.date <= today);
-  const logged = past.filter((d) => d.kcal);
-  const avg = logged.length ? Math.round(logged.reduce((a, d) => a + (d.kcal ?? 0), 0) / logged.length) : null;
-  const onTarget = logged.filter((d) => tone(d.kcal, target) === "on").length;
-  // Days with food logged, against the target: the deficit (or surplus) that moves the scale.
-  const balance = target ? logged.reduce((a, d) => a + (d.kcal ?? 0) - target, 0) : 0;
-  const wDone = days.filter((d) => d.workout === "done" || d.workout === "partial").length;
-  const wPlanned = days.filter((d) => d.workout).length;
-  const activeMin = days.reduce((a, d) => a + d.activeMin, 0);
-  const label = range === "month" ? monthName.format(new Date(`${from}T00:00:00Z`)) : range === "week" ? (back ? "השבוע שעבר" : "השבוע") : "היום";
+  const protein = ctx.showNumbers ? proteinTarget(ctx.draft.goals, ctx.weightKg) : null;
 
   return (
     <>
-      <PageHeader title={s.title} />
-
-      <nav aria-label="טווח" className="flex rounded-xl bg-surface p-1 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
-        {RANGES.map(([k, l]) => (
-          <Link
-            key={k}
-            href={`/progress?r=${k}`}
-            scroll={false}
-            aria-current={range === k ? "page" : undefined}
-            className={`flex min-h-10 flex-1 items-center justify-center rounded-lg text-sm font-medium transition-colors ${range === k ? "bg-night text-white" : "text-ink-muted hover:text-ink"}`}
-          >
-            {l}
-          </Link>
-        ))}
-      </nav>
+      <header className="flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold">{s.title}</h1>
+        <nav aria-label="טווח" className="flex rounded-xl bg-surface p-1 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
+          {RANGES.map(([k, l]) => (
+            <Link
+              key={k}
+              href={`/progress?r=${k}`}
+              scroll={false}
+              aria-current={range === k ? "page" : undefined}
+              className={`flex min-h-9 items-center justify-center rounded-lg px-3.5 text-sm font-medium transition-colors ${range === k ? "bg-night text-white" : "text-ink-muted hover:text-ink"}`}
+            >
+              {l}
+            </Link>
+          ))}
+        </nav>
+      </header>
 
       {range === "day" ? (
-        <Card className="flex flex-col gap-4">
-          {target ? (
-            <div className="flex flex-col gap-2 rounded-xl bg-night p-4 text-white">
-            <div className="flex items-center gap-4">
-              <CalorieRing eaten={mid(foodDay?.totals.kcal) ?? 0} target={target} size={112} />
-              <dl className="grid flex-1 grid-cols-3 gap-2 text-center">
-                {(
-                  [
-                    ["חלבון", foodDay?.totals.protein],
-                    ["פחמימות", foodDay?.totals.carbs],
-                    ["שומן", foodDay?.totals.fat],
-                  ] as const
-                ).map(([k, v]) => (
-                  <div key={k}>
-                    <dt className="text-[11px] text-white/60">{k}</dt>
-                    <dd className="num text-lg font-semibold">{v ?? "–"}</dd>
-                    <dd className="text-[10px] text-white/50">גרם</dd>
-                  </div>
-                ))}
-              </dl>
-            </div>
-            <p className="text-sm text-white/80">
-              {(mid(foodDay?.totals.kcal) ?? 0) <= target ? (
-                <>
-                  נשארו <span className="num font-semibold text-accent">{(target - (mid(foodDay?.totals.kcal) ?? 0)).toLocaleString("he-IL")}</span> קל׳ להיום.
-                </>
-              ) : (
-                <>
-                  <span className="num font-semibold text-coral">{((mid(foodDay?.totals.kcal) ?? 0) - target).toLocaleString("he-IL")}</span> קל׳ מעל היעד היום.
-                </>
-              )}
-            </p>
-            </div>
-          ) : null}
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold">מה נאכל היום</h2>
-            <Link href="/food" className="text-sm text-ink-muted underline underline-offset-4 hover:text-ink">
-              יומן מלא
-            </Link>
-          </div>
-          <FoodList logs={foodDay?.logs ?? []} tracking={Boolean(target)} />
-        </Card>
+        <DayView
+          day={askedDay}
+          today={today}
+          target={target}
+          protein={protein}
+          eaten={mid(foodDay?.totals.kcal) ?? 0}
+          proteinEaten={foodDay?.totals.protein ?? 0}
+          workout={workouts[askedDay] ?? null}
+          acts={logs.get(askedDay)?.fitness.acts ?? []}
+          foodDay={foodDay}
+          tracking={ctx.showNumbers}
+        />
       ) : (
-        <Card className="flex flex-col gap-4">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-semibold">{label}</h2>
-            <nav aria-label="תקופה" className="flex gap-1 rounded-lg bg-field p-1 text-sm">
-              <Link href={`/progress?r=${range}&b=1`} scroll={false} aria-current={back ? "page" : undefined} className={`rounded-md px-3 py-1 ${back ? "bg-surface font-medium shadow-sm" : "text-ink-muted"}`}>
-                קודם
-              </Link>
-              <Link href={`/progress?r=${range}`} scroll={false} aria-current={back ? undefined : "page"} className={`rounded-md px-3 py-1 ${back ? "text-ink-muted" : "bg-surface font-medium shadow-sm"}`}>
-                נוכחי
-              </Link>
-            </nav>
-          </div>
-
-          <dl className="grid grid-cols-3 gap-2 text-center">
-            <Stat label="ממוצע ליום" value={target && avg ? avg.toLocaleString("he-IL") : "–"} unit={target && avg ? "קל׳" : undefined} />
-            <Stat label="ימים ביעד" value={target ? `${onTarget}/${logged.length}` : "–"} />
-            <Stat label="אימונים" value={`${wDone}/${wPlanned}`} />
-          </dl>
-
-          {range === "week" ? <WeekBars days={days} target={target} today={today} /> : <MonthGrid days={days} target={target} today={today} />}
-
-          {target && logged.length ? (
-            <p className={`rounded-xl px-3 py-2 text-sm ${balance <= 0 ? "bg-accent-soft" : "bg-coral-soft"}`}>
-              מאזן מול היעד ב-<span className="num">{logged.length}</span> הימים שנרשמו:{" "}
-              <span className="num font-semibold" dir="ltr">
-                {balance > 0 ? "+" : balance < 0 ? "−" : ""}
-                {Math.abs(balance).toLocaleString("he-IL")}
-              </span>{" "}
-              קל׳
-              {Math.abs(balance) >= 770 ? (
-                <>
-                  {" "}
-                  (בערך <span className="num">{(Math.abs(balance) / 7700).toFixed(1)}</span> ק״ג {balance < 0 ? "פחות" : "יותר"})
-                </>
-              ) : null}
-              .
-            </p>
-          ) : null}
-
-          <p className="text-xs text-ink-muted">
-            {target ? (
-              <>
-                היעד היומי שלך: <span className="num">{target.toLocaleString("he-IL")}</span> קל׳. יום &quot;ביעד&quot; הוא עד 10% מעליו ועד 20% מתחתיו.{" "}
-              </>
-            ) : null}
-            {activeMin ? (
-              <>
-                פעילות נוספת: <span className="num">{activeMin}</span> דק׳.
-              </>
-            ) : null}
-          </p>
-        </Card>
+        <PeriodView
+          range={range}
+          back={back}
+          from={from}
+          to={to}
+          today={today}
+          target={target}
+          protein={protein}
+          food={food.days}
+          workouts={workouts}
+          activeMin={[...logs.values()].reduce((a, l) => a + l.fitness.acts.reduce((x, y) => x + y.min, 0), 0)}
+        />
       )}
 
       {p.hideWeight || ctx.hideWeight ? (
@@ -217,14 +139,227 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
   );
 }
 
-function Stat({ label, value, unit }: { label: string; value: string; unit?: string }) {
+function Stepper({ label, prev, next }: { label: string; prev: string | null; next: string | null }) {
+  const btn = "flex size-10 items-center justify-center rounded-xl bg-surface shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04] hover:bg-white";
   return (
-    <div className="rounded-xl bg-field p-3">
+    <div className="flex items-center justify-between gap-2">
+      {prev ? (
+        <Link href={prev} scroll={false} aria-label="הקודם" className={btn}>
+          <ChevronRight aria-hidden="true" className="size-5" />
+        </Link>
+      ) : (
+        <span className="size-10" />
+      )}
+      <span className="text-center font-semibold">{label}</span>
+      {next ? (
+        <Link href={next} scroll={false} aria-label="הבא" className={btn}>
+          <ChevronLeft aria-hidden="true" className="size-5" />
+        </Link>
+      ) : (
+        <span className="size-10" />
+      )}
+    </div>
+  );
+}
+
+/** A big number against its target, with what is left and a bar. */
+function Meter({ icon, title, value, target, unit, kind }: { icon: React.ReactNode; title: string; value: number; target: number | null; unit: string; kind: "calories" | "protein" }) {
+  const share = target ? value / target : 0;
+  const over = kind === "calories" && target !== null && value > target * 1.1;
+  const done = target !== null && (kind === "protein" ? value >= target : value >= target * 0.9 && !over);
+  return (
+    <section className="flex flex-col gap-2.5 rounded-[var(--radius-card)] bg-surface p-4 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
+      <h2 className="flex items-center gap-1.5 text-sm font-medium text-ink-muted">
+        {icon}
+        {title}
+      </h2>
+      <p className="flex items-baseline gap-1.5">
+        <span className="num text-4xl font-bold">{fmt(value)}</span>
+        {target ? (
+          <span className="num text-base text-ink-muted">
+            / {fmt(target)} {unit}
+          </span>
+        ) : (
+          <span className="text-sm text-ink-muted">{unit}</span>
+        )}
+      </p>
+      {target ? (
+        <>
+          <div className="h-3 overflow-hidden rounded-full bg-field" role="progressbar" aria-label={title} aria-valuenow={Math.round(Math.min(1, share) * 100)} aria-valuemin={0} aria-valuemax={100}>
+            <div className={`h-full rounded-full ${over ? "bg-coral" : done ? "bg-accent-strong" : "bg-sky"}`} style={{ width: `${Math.min(100, share * 100)}%` }} />
+          </div>
+          <p className={`text-sm ${over ? "text-coral" : done ? "font-medium text-accent-strong" : "text-ink-muted"}`}>
+            {value <= target ? (kind === "protein" && value >= target ? "הגעת ליעד" : `נותרו ${fmt(target - value)} ${unit}`) : kind === "protein" ? "הגעת ליעד" : `מעל היעד ב-${fmt(value - target)} ${unit}`}
+          </p>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
+function DayView({
+  day,
+  today,
+  target,
+  protein,
+  eaten,
+  proteinEaten,
+  workout,
+  acts,
+  foodDay,
+  tracking,
+}: {
+  day: string;
+  today: string;
+  target: number | null;
+  protein: number | null;
+  eaten: number;
+  proteinEaten: number;
+  workout: "done" | "partial" | "planned" | null;
+  acts: { kind: string; min: number }[];
+  foodDay: Awaited<ReturnType<typeof loadFoodDay>> | null;
+  tracking: boolean;
+}) {
+  const minutes = acts.reduce((a, x) => a + x.min, 0);
+  const label = day === today ? "היום" : day === addDays(today, -1) ? "אתמול" : dayName.format(new Date(`${day}T12:00:00Z`));
+  const next = day < today ? (addDays(day, 1) === today ? "/progress?r=day" : `/progress?r=day&d=${addDays(day, 1)}`) : null;
+  return (
+    <>
+      <Stepper label={label} prev={`/progress?r=day&d=${addDays(day, -1)}`} next={next} />
+      {tracking ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Meter kind="calories" icon={<Flame aria-hidden="true" className="size-4" />} title="קלוריות" value={eaten} target={target} unit="קל׳" />
+          <Meter kind="protein" icon={<Beef aria-hidden="true" className="size-4" />} title="חלבון" value={Math.round(proteinEaten)} target={protein} unit="ג׳" />
+        </div>
+      ) : null}
+      <section className="flex flex-col gap-3 rounded-[var(--radius-card)] bg-surface p-4 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
+        <h2 className="flex items-center gap-1.5 text-sm font-medium text-ink-muted">
+          <Dumbbell aria-hidden="true" className="size-4" />
+          פעילות גופנית
+        </h2>
+        <dl className="grid grid-cols-2 gap-3">
+          <div>
+            <dt className="text-xs text-ink-muted">אימון</dt>
+            <dd className="text-xl font-semibold">{workout === "done" ? "הושלם" : workout === "partial" ? "חלקי" : workout === "planned" ? (day === today ? "מחכה" : "לא בוצע") : "יום מנוחה"}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-ink-muted">דקות פעילות</dt>
+            <dd className="num text-xl font-semibold">{minutes}</dd>
+          </div>
+        </dl>
+        {acts.length ? (
+          <ul className="flex flex-wrap gap-1.5">
+            {acts.map((a, i) => (
+              <li key={i} className="rounded-full bg-field px-3 py-1 text-xs">
+                {ACTIVITIES[a.kind as ActivityKind]?.label ?? a.kind} <span className="num">{a.min}</span> דק׳
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </section>
+      <FoodDiary logs={foodDay?.logs ?? []} tracking={tracking} canAdd={day === today} />
+    </>
+  );
+}
+
+function PeriodView({
+  range,
+  back,
+  from,
+  to,
+  today,
+  target,
+  protein,
+  food,
+  workouts,
+  activeMin,
+}: {
+  range: "week" | "month";
+  back: number;
+  from: string;
+  to: string;
+  today: string;
+  target: number | null;
+  protein: number | null;
+  food: Awaited<ReturnType<typeof loadFoodRange>>["days"];
+  workouts: Record<string, "done" | "partial" | "planned">;
+  activeMin: number;
+}) {
+  const dates: string[] = [];
+  for (let d = from; d <= to; d = addDays(d, 1)) dates.push(d);
+  const kcal = dates.map((d) => ({ date: d, value: mid(food[d]?.totals.kcal) }));
+  const prot = dates.map((d) => ({ date: d, value: food[d]?.totals.protein ? Math.round(food[d]!.totals.protein!) : null }));
+  const loggedK = kcal.filter((d) => d.value && d.date <= today);
+  const loggedP = prot.filter((d) => d.value && d.date <= today);
+  const avgK = loggedK.length ? loggedK.reduce((a, d) => a + d.value!, 0) / loggedK.length : null;
+  const avgP = loggedP.length ? loggedP.reduce((a, d) => a + d.value!, 0) / loggedP.length : null;
+  const onTarget = target ? loggedK.filter((d) => d.value! <= target * 1.1 && d.value! >= target * 0.8).length : 0;
+  const balance = target ? loggedK.reduce((a, d) => a + d.value! - target, 0) : 0;
+  const marks = Object.entries(workouts).filter(([d]) => d >= from && d <= to);
+  const wDone = marks.filter(([, w]) => w === "done" || w === "partial").length;
+  const label =
+    range === "month"
+      ? monthName.format(new Date(`${from}T00:00:00Z`))
+      : back === 0
+        ? "השבוע"
+        : back === 1
+          ? "השבוע שעבר"
+          : `${shortDate.format(new Date(`${from}T12:00:00Z`))}–${shortDate.format(new Date(`${to}T12:00:00Z`))}`;
+  return (
+    <>
+      <Stepper label={label} prev={`/progress?r=${range}&b=${back + 1}`} next={back > 0 ? `/progress?r=${range}${back > 1 ? `&b=${back - 1}` : ""}` : null} />
+      <dl className="grid grid-cols-3 gap-2.5">
+        <Stat label="ממוצע קלוריות" value={target && avgK ? fmt(avgK) : "–"} />
+        <Stat label="ממוצע חלבון" value={protein && avgP ? `${fmt(avgP)} ג׳` : "–"} />
+        <Stat label="אימונים" value={`${wDone}/${marks.length}`} />
+      </dl>
+      {target ? (
+        <Card className="flex flex-col gap-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="font-semibold">קלוריות לפי ימים</h2>
+            <span className="text-xs text-ink-muted">
+              <span className="num">{onTarget}</span> ימים ביעד
+            </span>
+          </div>
+          <DayBars days={kcal} target={target} today={today} kind="calories" label="קלוריות לפי יום" />
+          {loggedK.length ? (
+            <p className={`rounded-xl px-3 py-2 text-sm ${balance <= 0 ? "bg-accent-soft" : "bg-coral-soft"}`}>
+              מאזן מול היעד:{" "}
+              <span className="num font-semibold" dir="ltr">
+                {balance > 0 ? "+" : balance < 0 ? "−" : ""}
+                {fmt(Math.abs(balance))}
+              </span>{" "}
+              קל׳
+              {Math.abs(balance) >= 770 ? (
+                <>
+                  {" "}
+                  (בערך <span className="num">{(Math.abs(balance) / 7700).toFixed(1)}</span> ק״ג {balance < 0 ? "פחות" : "יותר"})
+                </>
+              ) : null}
+            </p>
+          ) : null}
+        </Card>
+      ) : null}
+      {protein ? (
+        <Card className="flex flex-col gap-3">
+          <h2 className="font-semibold">חלבון לפי ימים</h2>
+          <DayBars days={prot} target={protein} today={today} kind="protein" label="חלבון לפי יום" />
+        </Card>
+      ) : null}
+      {activeMin ? (
+        <p className="text-sm text-ink-muted">
+          פעילות נוספת בתקופה: <span className="num">{activeMin}</span> דק׳.
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[var(--radius-card)] bg-surface p-3 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
       <dt className="text-xs text-ink-muted">{label}</dt>
-      <dd className="num text-lg font-semibold">
-        {value}
-        {unit ? <span className="text-xs font-normal text-ink-muted"> {unit}</span> : null}
-      </dd>
+      <dd className="num mt-0.5 text-xl font-bold">{value}</dd>
     </div>
   );
 }
