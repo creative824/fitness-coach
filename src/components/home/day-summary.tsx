@@ -2,7 +2,8 @@
 
 import { Beef, ChevronLeft, Flame, ListChecks, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { saveDayScore } from "@/lib/day/score-actions";
 import { calorieScore, dailyScore, DAILY_WEIGHTS, type DailyPart } from "@/lib/day/scores";
 import { dayMessage } from "@/lib/day/message";
 import { fmt, useDay } from "./day-context";
@@ -45,6 +46,8 @@ export function DaySummary({
   proteinTarget,
   minutes,
   trackHref = "/progress?r=day",
+  history,
+  persist = false,
 }: {
   /** Daily calorie target, or null when calories are not counted. */
   target: number | null;
@@ -53,12 +56,28 @@ export function DaySummary({
   minutes: number;
   /** Where the calorie and protein cards lead (null: not links, as in the demo). */
   trackHref?: string | null;
+  /** Earlier scores to compare with (saved on their own days). */
+  history?: { yesterday: number | null; weekAvg: number | null };
+  /** Save today's score as it changes (off in the demo). */
+  persist?: boolean;
 }) {
   const now = useMinutes(minutes);
   const { kcal, protein, allTasks, day, message } = useSummary(target, proteinTarget, now);
+  const last = useRef("");
+  useEffect(() => {
+    if (!persist || day.score === null) return;
+    const snap = { score: day.score, points: day.points, kcalTarget: target, proteinTarget };
+    const key = JSON.stringify(snap);
+    if (key === last.current) return;
+    const id = setTimeout(() => {
+      last.current = key;
+      saveDayScore(snap).catch(() => {});
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [persist, day.score, day.points, target, proteinTarget]);
   return (
     <>
-      <ScoreCard score={day.score} points={day.points} message={message.text} tone={message.tone} />
+      <ScoreCard score={day.score} points={day.points} message={message.text} tone={message.tone} history={history} evening={now >= 20 * 60} />
       <div className="grid grid-cols-3 gap-2.5">
         <MetricCard
           href={trackHref}
@@ -97,7 +116,22 @@ export function DaySummary({
 
 const RING = { r: 34, c: 2 * Math.PI * 34 };
 
-function ScoreCard({ score, points, message, tone }: { score: number | null; points: Record<DailyPart, number | null>; message: string; tone: "good" | "info" | "warn" }) {
+function ScoreCard({
+  score,
+  points,
+  message,
+  tone,
+  history,
+  evening,
+}: {
+  score: number | null;
+  points: Record<DailyPart, number | null>;
+  message: string;
+  tone: "good" | "info" | "warn";
+  history?: { yesterday: number | null; weekAvg: number | null };
+  evening: boolean;
+}) {
+  const diff = score !== null && history?.yesterday != null ? score - history.yesterday : null;
   const color = score === null ? "text-white/20" : score >= 70 ? "text-accent" : score >= 40 ? "text-sky" : "text-coral";
   return (
     <section aria-label="הציון היומי" className="flex flex-col gap-3 rounded-[var(--radius-card)] bg-night p-4 text-white shadow-[var(--shadow-float)]">
@@ -124,7 +158,7 @@ function ScoreCard({ score, points, message, tone }: { score: number | null; poi
           </span>
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <h2 className="text-sm font-medium text-white/70">הציון היומי</h2>
+          <h2 className="text-sm font-medium text-white/70">{evening ? "סיכום היום" : "הציון היומי"}</h2>
           <dl className="grid grid-cols-2 gap-x-3 gap-y-1">
             {(Object.keys(DAILY_WEIGHTS) as DailyPart[]).map((k) => (
               <div key={k} className="flex items-baseline justify-between gap-1 text-sm">
@@ -136,6 +170,22 @@ function ScoreCard({ score, points, message, tone }: { score: number | null; poi
               </div>
             ))}
           </dl>
+          {history && (history.yesterday !== null || history.weekAvg !== null) ? (
+            <p className="text-xs text-white/55">
+              {history.yesterday !== null ? (
+                <>
+                  אתמול <span className="num text-white/80">{history.yesterday}</span>
+                  {diff !== null && evening && diff !== 0 ? <span className={diff > 0 ? "text-accent" : "text-coral"}> ({diff > 0 ? "+" : "−"}{Math.abs(diff)})</span> : null}
+                </>
+              ) : null}
+              {history.yesterday !== null && history.weekAvg !== null ? " · " : null}
+              {history.weekAvg !== null ? (
+                <>
+                  ממוצע שבועי <span className="num text-white/80">{history.weekAvg}</span>
+                </>
+              ) : null}
+            </p>
+          ) : null}
         </div>
       </div>
       <p

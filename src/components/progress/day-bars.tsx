@@ -10,9 +10,10 @@ export interface BarDay {
 const LETTERS = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
 const weekday = (d: string) => new Date(`${d}T00:00:00Z`).getUTCDay();
 
-export type BarKind = "calories" | "protein";
+export type BarKind = "calories" | "protein" | "score";
 
 function fill(kind: BarKind, v: number, target: number | null): string {
+  if (kind === "score") return v >= 70 ? "bg-accent-strong" : v >= 40 ? "bg-sky" : "bg-coral";
   if (!target) return "bg-sky";
   if (kind === "protein") return v >= target ? "bg-accent-strong" : "bg-sky";
   if (v > target * 1.1) return "bg-coral";
@@ -21,7 +22,7 @@ function fill(kind: BarKind, v: number, target: number | null): string {
 }
 
 export function DayBars({ days, target, today, kind, label }: { days: BarDay[]; target: number | null; today: string; kind: BarKind; label: string }) {
-  const max = Math.max(target ?? 0, ...days.map((d) => d.value ?? 0)) * 1.12 || 1;
+  const max = kind === "score" ? 112 : Math.max(target ?? 0, ...days.map((d) => d.value ?? 0)) * 1.12 || 1;
   const month = days.length > 7;
   return (
     <figure className="flex flex-col gap-1.5" aria-label={label}>

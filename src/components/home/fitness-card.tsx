@@ -1,6 +1,6 @@
 "use client";
 
-import { Beef, Carrot, Check, Clock, Footprints, Info, Moon, NotebookPen, Plus, StretchHorizontal, Trash2, TriangleAlert, X } from "lucide-react";
+import { Apple, Beef, Carrot, Check, Clock, Dumbbell, Egg, Footprints, GlassWater, HeartPulse, Info, Plus, StretchHorizontal, Trash2, TriangleAlert, Utensils, Wheat, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { ExerciseDemo } from "@/components/exercise/exercise-demo";
@@ -9,7 +9,7 @@ import { MUSCLES } from "@/content/muscles";
 import { ACTIVITIES, ACTIVITY_KINDS, activityKcal, MINUTE_CHOICES, type ActivityKind } from "@/lib/fitness/activities";
 import { addActivity, removeActivity, setExerciseDone, type FitnessResult } from "@/lib/fitness/actions";
 import type { FitnessState } from "@/lib/menu/data";
-import { minutesFor, type SmartTaskKind } from "@/lib/day/smart-tasks";
+import { MOVE_TASKS, minutesFor, type SmartTaskKind } from "@/lib/day/smart-tasks";
 import { setSmartTaskDone } from "@/lib/fitness/actions";
 import { useDay } from "./day-context";
 
@@ -40,19 +40,25 @@ export interface SmallTask {
   auto: boolean;
 }
 
-const MOVEMENT_KINDS: SmartTaskKind[] = ["walk", "brisk_walk", "jog", "stretch", "steps_break"];
-const MOVE_KINDS = new Set<SmartTaskKind>(MOVEMENT_KINDS);
-const planType = (k: SmartTaskKind) => (MOVEMENT_KINDS.includes(k) ? "movement" : k === "sleep" ? "recovery" : "habit");
+const MOVE_KINDS = new Set<SmartTaskKind>(MOVE_TASKS);
+const planType = (k: SmartTaskKind) => (MOVE_KINDS.has(k) ? "movement" : "habit");
 const TASK_ICON: Record<SmartTaskKind, typeof Footprints> = {
   walk: Footprints,
   brisk_walk: Footprints,
   jog: Footprints,
   steps_break: Footprints,
+  aerobic: HeartPulse,
+  legs: Dumbbell,
+  cooldown: StretchHorizontal,
   stretch: StretchHorizontal,
-  protein: Beef,
-  log_food: NotebookPen,
+  protein_breakfast: Egg,
+  protein_lunch: Beef,
+  protein_half: Beef,
   veg: Carrot,
-  sleep: Moon,
+  fruit: Apple,
+  fiber: Wheat,
+  swap_drink: GlassWater,
+  real_meal: Utensils,
 };
 
 const muscleName = new Map<string, string>(MUSCLES.map((m) => [m.id, m.name_he]));
@@ -116,7 +122,7 @@ export function FitnessCard({
   /** Movement tasks fill up from the activities added; the rest are ticked by hand (or done automatically). */
   const progressOf = (t: SmallTask) => (t.minutes ? Math.min(t.minutes, minutesFor(t.kind, fit.acts)) : 0);
   const isTaskDone = (t: SmallTask) =>
-    t.auto || fit.done.includes(`t:${t.id}`) || (t.minutes ? progressOf(t) >= t.minutes : false) || (t.kind === "protein" && Boolean(t.grams) && eatenProtein >= (t.grams ?? 0));
+    t.auto || fit.done.includes(`t:${t.id}`) || (t.minutes ? progressOf(t) >= t.minutes : false) || (t.kind === "protein_half" && Boolean(t.grams) && eatenProtein >= (t.grams ?? 0));
   const tasksDone = tasks.filter(isTaskDone).length;
   useEffect(() => setActions({ done: doneCount + tasksDone, total: total + tasks.length }), [doneCount, tasksDone, total, tasks.length, setActions]);
   const moves = tasks.filter((t) => MOVE_KINDS.has(t.kind));

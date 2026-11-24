@@ -51,6 +51,7 @@ export const stepSchemas = {
     height_cm: z.number().min(120).max(230),
     weight_kg: z.number().min(35).max(300),
     target_weight_kg: z.number().min(35).max(300).nullable(),
+    target_date: z.iso.date().nullable(),
     sex: z.enum(SEXES).nullable(),
   }),
   goals: z.object({
@@ -94,6 +95,8 @@ export interface OnboardingDraft {
   height_cm: number | null;
   weight_kg: number | null;
   target_weight_kg: number | null;
+  /** When the user wants to reach the target weight (YYYY-MM-DD), or null. */
+  target_date: string | null;
   /** Optional; only used to estimate calories more precisely. */
   sex: (typeof SEXES)[number] | null;
   goals: GoalType[];
@@ -125,6 +128,7 @@ export const emptyDraft = (): OnboardingDraft => ({
   height_cm: null,
   weight_kg: null,
   target_weight_kg: null,
+  target_date: null,
   sex: null,
   goals: [],
   dietary_pattern: null,

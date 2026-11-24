@@ -87,8 +87,9 @@ function setupFor(p: Person) {
   const tasks: SmallTask[] = smartTasks({
     goals: p.goals, experience: p.experience, activityLevel: p.activityLevel, age: p.age, bmi: bmiOf(p.weightKg, p.heightCm), weightKg: p.weightKg, sleepHours: p.sleepHours,
     lowIntensityOnly: false, needsDoctor: false, hideNumbers: false, workoutToday: blocks.length > 0, weeksIn: 0,
+    date: `2026-01-${10 + p.id.length}`, proteinTarget: proteinTarget(p.goals, p.weightKg, { heightCm: p.heightCm, activityLevel: p.activityLevel }),
   }).map((t) => ({ id: t.id, kind: t.kind, title: t.title, why: t.why, minutes: t.minutes, grams: t.grams, auto: false }));
-  return { target, menu, tasks, weight: sampleWeights(p), protein: proteinTarget(p.goals, p.weightKg), workout: p.workout && blocks.length ? { title: p.workout.title, minutes: p.workout.minutes, blocks } : null };
+  return { target, menu, tasks, weight: sampleWeights(p), protein: proteinTarget(p.goals, p.weightKg, { heightCm: p.heightCm, activityLevel: p.activityLevel }), workout: p.workout && blocks.length ? { title: p.workout.title, minutes: p.workout.minutes, blocks } : null };
 }
 
 export function DemoDay() {

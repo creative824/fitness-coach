@@ -3,7 +3,9 @@ import { cache } from "react";
 import type { DietProfile } from "@/lib/menu/engine";
 import { loadOnboarding } from "@/lib/onboarding/data";
 import type { OnboardingDraft } from "@/lib/onboarding/schema";
-import { calorieTarget } from "@/lib/plan/targets";
+import { proteinTarget } from "@/lib/day/scores";
+import { calorieTarget, type CalorieTarget } from "@/lib/plan/targets";
+import { localDay } from "@/lib/water/time";
 import { screenSafety } from "@/lib/safety/screen";
 import { createClient } from "@/lib/supabase/server";
 
@@ -33,6 +35,10 @@ export interface DayContext {
   needsDoctor: boolean;
   /** Whole weeks since onboarding was completed, for gradual step-ups. */
   weeksIn: number;
+  /** Grams of protein a day, or null without a weight or with numbers hidden. */
+  protein: number | null;
+  /** The full calorie calculation (BMR, daily use, pace to the goal), when there is one. */
+  calc: CalorieTarget | null;
 }
 
 /** Everything the today screen and the menu actions need about the user, read once per request. */
@@ -56,6 +62,9 @@ export const loadDayContext = cache(async (userId: string): Promise<DayContext> 
     experience: d.experience,
     availableDays: d.available_days,
     safety,
+    targetWeightKg: d.target_weight_kg,
+    targetDate: d.target_date,
+    today: localDay(new Date()).date,
   };
   const hideNumbers = safety.reasons.includes("eating_disorder");
   let cal = calorieTarget(input);
@@ -88,5 +97,7 @@ export const loadDayContext = cache(async (userId: string): Promise<DayContext> 
     lowIntensityOnly: safety.restrictions.lowIntensityOnly,
     needsDoctor: safety.level === "refer",
     weeksIn: state.completedAt ? Math.max(0, Math.floor((Date.now() - Date.parse(state.completedAt)) / (7 * 86_400_000))) : 0,
+    protein: tracking && !hideNumbers ? proteinTarget(d.goals, weightKg, { heightCm: d.height_cm, activityLevel: d.activity_level }) : null,
+    calc: cal,
   };
 });

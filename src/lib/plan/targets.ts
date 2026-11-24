@@ -19,8 +19,9 @@ export const ACTIVITY_FACTOR: Record<string, number> = {
   very_active: 1.9,
 };
 
-/** Lower bound so the target never suggests very low intake. */
+/** Lower bound so the target never suggests very low intake (1,200 for women). */
 const MIN_CALORIES = 1400;
+const MIN_CALORIES_FEMALE = 1200;
 /** kcal per kg of body-weight change, the usual rule of thumb (Hall 2008: about 7,700). */
 export const KCAL_PER_KG = 7700;
 
@@ -37,6 +38,10 @@ export interface TargetInput {
   experience: "beginner" | "intermediate" | "advanced" | null;
   availableDays: number[];
   safety: SafetyResult;
+  /** Optional goal: the weight to reach and by when (YYYY-MM-DD), measured from `today`. */
+  targetWeightKg?: number | null;
+  targetDate?: string | null;
+  today?: string;
 }
 
 export interface Targets {
@@ -59,6 +64,21 @@ export interface CalorieTarget {
   kgPerWeek: number;
   /** True when sex was given, so one equation was used and the range is narrow. */
   precise: boolean;
+  /** Basal metabolic rate (Mifflin-St Jeor), rounded to 10. */
+  bmr: number;
+  /** The goal check, when a target weight (and maybe a date) was given. */
+  pace: GoalPace | null;
+}
+
+export interface GoalPace {
+  /** kg per week the chosen date needs (negative = loss), or null without a date. */
+  neededKgPerWeek: number | null;
+  /** The chosen date needs a faster pace than is healthy. */
+  tooFast: boolean;
+  /** A date at a moderate, healthy pace (YYYY-MM-DD). */
+  recommendedDate: string;
+  /** When the target weight is reached at the planned pace (YYYY-MM-DD), or null. */
+  etaDate: string | null;
 }
 
 const round50 = (n: number) => Math.round(n / 50) * 50;
@@ -81,34 +101,84 @@ export function calorieTarget(input: TargetInput): CalorieTarget | null {
   if (!age || !h || !w) return null;
   const base = 10 * w + 6.25 * h - 5 * age;
   const factor = ACTIVITY_FACTOR[input.activityLevel ?? ""] ?? ACTIVITY_FACTOR.light;
-  const male = (base + 5) * factor;
-  const female = (base - 161) * factor;
-  const maintenance = input.sex === "male" ? male : input.sex === "female" ? female : (male + female) / 2;
+  const bmrMale = base + 5;
+  const bmrFemale = base - 161;
+  const bmr = input.sex === "male" ? bmrMale : input.sex === "female" ? bmrFemale : (bmrMale + bmrFemale) / 2;
+  const male = bmrMale * factor;
+  const female = bmrFemale * factor;
+  const maintenance = bmr * factor;
 
   const goal = input.goals[0];
+  const losing = goal === "lose_weight" && !safety.restrictions.noWeightLossGoal;
+  const gaining = goal === "gain_weight" || goal === "muscle";
+  const maxDeficit = Math.min(maintenance * 0.25, MAX_DEFICIT, (w * SAFE_LOSS_PER_WEEK * KCAL_PER_KG) / 7);
+  const pace = goalPace(input, w);
   let adjust = 0;
-  if (goal === "lose_weight" && !safety.restrictions.noWeightLossGoal) {
+  if (losing) {
     const forHalfPercent = (w * 0.005 * KCAL_PER_KG) / 7;
-    adjust = -Math.min(clamp(forHalfPercent, 300, 600), maintenance * 0.25);
-  } else if (goal === "gain_weight" || goal === "muscle") {
+    const usual = Math.min(clamp(forHalfPercent, 300, 600), maxDeficit);
+    // A chosen date sets the pace, inside the healthy limits; a date too close gets the limit.
+    const needed = pace?.neededKgPerWeek != null && pace.neededKgPerWeek < 0 ? (-pace.neededKgPerWeek * KCAL_PER_KG) / 7 : null;
+    adjust = -(needed === null ? usual : clamp(needed, 150, maxDeficit));
+  } else if (gaining) {
     adjust = clamp(maintenance * 0.1, 200, 400);
   }
   adjust = round50(adjust);
 
-  const kcal = Math.max(MIN_CALORIES, round50(maintenance + adjust));
+  const floor = input.sex === "female" ? MIN_CALORIES_FEMALE : MIN_CALORIES;
+  const kcal = Math.max(Math.min(floor, round50(maintenance)), round50(maintenance + adjust));
+  const realAdjust = kcal - round50(maintenance);
   const precise = Boolean(input.sex);
   const range: [number, number] = precise
-    ? [Math.max(MIN_CALORIES, kcal - 100), kcal + 100]
-    : [Math.max(MIN_CALORIES, round50(female + adjust)), Math.max(MIN_CALORIES, round50(male + adjust))];
+    ? [Math.max(Math.min(floor, kcal), kcal - 100), kcal + 100]
+    : [Math.max(Math.min(floor, kcal), round50(female + realAdjust)), Math.max(kcal, round50(male + realAdjust))];
   if (range[1] < range[0] + 100) range[1] = range[0] + 100;
+  const kgPerWeek = Math.round(((realAdjust * 7) / KCAL_PER_KG) * 100) / 100;
   return {
     kcal,
     range,
     maintenance: round50(maintenance),
-    adjust,
-    kgPerWeek: Math.round(((adjust * 7) / KCAL_PER_KG) * 100) / 100,
+    adjust: realAdjust,
+    kgPerWeek,
     precise,
+    bmr: Math.round(bmr / 10) * 10,
+    pace: pace ? { ...pace, etaDate: etaOf(input, w, kgPerWeek) } : null,
   };
+}
+
+/** The fastest loss the app plans for: 1% of body weight a week, and never more than 1,000 kcal a day. */
+export const SAFE_LOSS_PER_WEEK = 0.01;
+const MAX_DEFICIT = 1000;
+/** The pace a recommended date is built on: 0.7% of body weight a week. */
+const MODERATE_LOSS_PER_WEEK = 0.007;
+const MODERATE_GAIN_PER_WEEK = 0.0025;
+
+const DAY_MS = 86_400_000;
+const addDaysIso = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * DAY_MS).toISOString().slice(0, 10);
+const daysUntil = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS);
+
+function goalPace(input: TargetInput, w: number): Omit<GoalPace, "etaDate"> | null {
+  const t = input.targetWeightKg;
+  if (!t || !input.today || Math.abs(t - w) < 0.5) return null;
+  const losing = t < w;
+  const perWeek = (losing ? MODERATE_LOSS_PER_WEEK : MODERATE_GAIN_PER_WEEK) * w;
+  const recommendedDate = addDaysIso(input.today, Math.ceil((Math.abs(t - w) / perWeek) * 7));
+  const days = input.targetDate ? daysUntil(input.today, input.targetDate) : null;
+  if (days === null || days <= 0) return { neededKgPerWeek: null, tooFast: days !== null, recommendedDate };
+  const needed = ((t - w) / days) * 7;
+  const tooFast = losing ? -needed > w * SAFE_LOSS_PER_WEEK : needed > w * 0.005;
+  return { neededKgPerWeek: Math.round(needed * 100) / 100, tooFast, recommendedDate };
+}
+
+function etaOf(input: TargetInput, w: number, kgPerWeek: number): string | null {
+  const t = input.targetWeightKg;
+  if (!t || !input.today || !kgPerWeek || Math.sign(t - w) !== Math.sign(kgPerWeek)) return null;
+  return addDaysIso(input.today, Math.ceil(((t - w) / kgPerWeek) * 7));
+}
+
+/** Minutes of activity a day to aim for, on top of the workouts: more for those who sit most of the day. */
+export function activeMinutesTarget(activityLevel: string | null): number {
+  return activityLevel === "sedentary" ? 20 : activityLevel === "light" ? 25 : 30;
 }
 
 export function caloriesRange(input: TargetInput): [number, number] | null {

@@ -15,7 +15,7 @@ import { EmptyState, LoadingState } from "@/components/ui/states";
 import { EXERCISES } from "@/content/exercises";
 import { competitionCards } from "@/lib/competitions/data";
 import { loadDayContext } from "@/lib/day/context";
-import { proteinTarget } from "@/lib/day/scores";
+import { loadScores } from "@/lib/day/score-data";
 import { smartTasks, type SmartTaskInput } from "@/lib/day/smart-tasks";
 import { requireUser } from "@/lib/data/user";
 import { loadFoodDay } from "@/lib/food/data";
@@ -24,7 +24,7 @@ import { loadDayLog } from "@/lib/menu/data";
 import { toView } from "@/lib/menu/view";
 import { generateWeekPlan, loadDayTasks, loadWeek } from "@/lib/plan/data";
 import { PER_SIDE } from "@/lib/plan/duration";
-import { weekdayOf, weekStartOf } from "@/lib/plan/week";
+import { addDays, weekdayOf, weekStartOf } from "@/lib/plan/week";
 import { bmiOf } from "@/lib/progress/bmi";
 import { loadRecentWeights } from "@/lib/progress/data";
 import { loadWaterToday } from "@/lib/water/data";
@@ -87,13 +87,16 @@ async function Today() {
     loadFoodDay(user.id, date).catch(() => null),
     loadWaterToday(user.id).catch(() => null),
     ctx.hideWeight ? Promise.resolve([]) : loadRecentWeights(user.id, date).catch(() => []),
+    loadScores(user.id, addDays(date, -7), addDays(date, -1)).catch(() => new Map()),
   ]);
   // The week's plan is made on its own the first time the week is opened.
   if (!week) {
     const made = await generateWeekPlan(user.id, weekStart).catch(() => null);
     if (made?.ok) [week, tasks] = await Promise.all([loadWeek(user.id, weekStart).catch(() => null), tasksOf()]);
   }
-  const [day, food, water, weights] = await rest;
+  const [day, food, water, weights, scores] = await rest;
+  const past = [...scores.values()].map((x) => x.score);
+  const history = { yesterday: scores.get(addDays(date, -1))?.score ?? null, weekAvg: past.length ? Math.round(past.reduce((a, b) => a + b, 0) / past.length) : null };
 
   const planDay = week?.plan.days[weekdayOf(date)];
   const w = planDay?.workout ?? null;
@@ -120,7 +123,9 @@ async function Today() {
   const workout = w && blocks.length ? { title: w.title, minutes: w.estimated_minutes, blocks } : null;
   const doneBlocks = blocks.filter((b) => day.fitness.done.includes(`ex:${b.index}`)).length;
 
-  const confirmedMeals = food?.logs.filter((l) => l.status === "confirmed").length ?? 0;
+  // Protein eaten at each meal, so "protein at breakfast" ticks itself.
+  const mealProtein = (meal: string) =>
+    (food?.logs ?? []).filter((l) => l.status === "confirmed" && l.mealType === meal).reduce((a, l) => a + l.items.reduce((x, i) => x + (i.protein_g ?? 0), 0), 0);
   const taskInput: Omit<SmartTaskInput, "workoutToday"> = {
     goals: ctx.draft.goals,
     experience: ctx.draft.experience,
@@ -133,15 +138,20 @@ async function Today() {
     needsDoctor: ctx.needsDoctor,
     hideNumbers: !ctx.showNumbers,
     weeksIn: ctx.weeksIn,
+    proteinTarget: ctx.protein,
   };
-  const small: SmallTask[] = smartTasks({ ...taskInput, workoutToday: Boolean(workout) }).map((t) => ({
+  const yesterday = smartTasks({ ...taskInput, workoutToday: false, date: addDays(date, -1) }).map((t) => t.id);
+  const small: SmallTask[] = smartTasks({ ...taskInput, workoutToday: Boolean(workout), date, recent: yesterday }).map((t) => ({
     id: t.id,
     kind: t.kind,
     title: t.title,
     why: t.why,
     minutes: t.minutes,
     grams: t.grams,
-    auto: (t.kind === "log_food" && confirmedMeals >= 3) || (t.kind === "protein" && Boolean(t.grams) && (food?.totals.protein ?? 0) >= (t.grams ?? 0)),
+    auto:
+      (t.kind === "protein_breakfast" && mealProtein("breakfast") >= 15) ||
+      (t.kind === "protein_lunch" && mealProtein("lunch") >= 20) ||
+      (t.kind === "protein_half" && Boolean(t.grams) && (food?.totals.protein ?? 0) >= (t.grams ?? 0)),
   }));
 
   const waterTask = tasks.tasks.find((x) => x.type === "water") ?? null;
@@ -149,7 +159,7 @@ async function Today() {
     ? dailyWaterTargetMl({ weightKg: water.weightKg, workoutToday: Boolean(workout), medicalRestriction: water.medicalRestriction })
     : null;
 
-  const protein = ctx.showNumbers ? proteinTarget(ctx.draft.goals, ctx.weightKg) : null;
+  const protein = ctx.protein;
   const weight = ctx.hideWeight ? null : { history: weights, startKg: ctx.draft.weight_kg ?? ctx.weightKg, heightCm: ctx.heightCm, today: date };
 
   return (
@@ -158,7 +168,7 @@ async function Today() {
       <Suspense fallback={<div className="h-[76px] animate-pulse rounded-[var(--radius-card)] bg-white/60" aria-hidden="true" />}>
         <Competitions userId={user.id} today={date} me={{ seed: user.id, avatar: ctx.draft.avatar }} />
       </Suspense>
-      <DaySummary target={ctx.showNumbers ? ctx.target : null} proteinTarget={protein} minutes={minutes} />
+      <DaySummary target={ctx.showNumbers ? ctx.target : null} proteinTarget={protein} minutes={minutes} history={history} persist={day.saved} />
       <DayExtras
         water={water ? { drank: water.logs.reduce((a, b) => a + b, 0), target: waterTarget, vesselMl: water.vesselMl, taskId: waterTask?.id ?? null } : null}
         weight={weight}

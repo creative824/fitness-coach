@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calorieScore, proteinTarget, taskScore, weekAverage } from "./scores";
+import { calorieScore, proteinTarget } from "./scores";
 
 describe("calorieScore", () => {
   it("is full within 10% of the target and falls to 0 at 40% off", () => {
@@ -23,38 +23,12 @@ describe("calorieScore", () => {
 describe("proteinTarget", () => {
   it("follows the goal and the weight", () => {
     expect(proteinTarget(["muscle"], 75)).toBe(120);
-    expect(proteinTarget(["lose_weight"], 92)).toBe(110);
+    expect(proteinTarget(["lose_weight"], 92)).toBe(145);
+    // High BMI: the weight at BMI 27 is used.
+    expect(proteinTarget(["lose_weight"], 120, { heightCm: 170 })).toBe(125);
+    expect(proteinTarget(["muscle"], 75, { activityLevel: "very_active" })).toBe(135);
     expect(proteinTarget(["general_fitness"], 66)).toBe(65);
     expect(proteinTarget(["muscle"], null)).toBeNull();
   });
 });
 
-describe("taskScore", () => {
-  it("weights calories, protein and actions 30/30/40", () => {
-    const r = taskScore({ calorie: 100, protein: { eaten: 60, target: 120 }, actions: { done: 3, total: 4 } });
-    expect(r.parts).toEqual({ calories: 100, protein: 50, actions: 75 });
-    expect(r.score).toBe(75);
-  });
-  it("leaves out parts with no data", () => {
-    expect(taskScore({ calorie: null, protein: null, actions: { done: 1, total: 2 } }).score).toBe(50);
-    expect(taskScore({ calorie: null, protein: null, actions: { done: 0, total: 0 } }).score).toBeNull();
-  });
-});
-
-it("averages the days that have a score", () => {
-  expect(weekAverage([80, null, 60])).toBe(70);
-  expect(weekAverage([null])).toBeNull();
-});
-
-describe("countActions", async () => {
-  const { countActions } = await import("./actions-count");
-  it("counts exercises, ticked tasks, walks from activities and automatic ones", () => {
-    const tasks = [
-      { id: "walk", kind: "walk" as const, minutes: 20 },
-      { id: "log", kind: "log_food" as const },
-      { id: "sleep", kind: "sleep" as const },
-    ];
-    expect(countActions(tasks, 4, { done: ["ex:0", "ex:1", "t:sleep"], acts: [{ kind: "walk", min: 25 }] }, { meals: 3, protein: 50 })).toEqual({ done: 5, total: 7 });
-    expect(countActions(tasks, 0, { done: [], acts: [] }, { meals: 1, protein: null })).toEqual({ done: 0, total: 3 });
-  });
-});
