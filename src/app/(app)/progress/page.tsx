@@ -8,7 +8,8 @@ import { WeightCard } from "@/components/progress/weight-card";
 import { Card } from "@/components/ui/card";
 import { LoadingState } from "@/components/ui/states";
 import { loadDayContext } from "@/lib/day/context";
-import { proteinTarget } from "@/lib/day/scores";
+import { loadScores, type SavedScore } from "@/lib/day/score-data";
+import { DAILY_WEIGHTS, type DailyPart } from "@/lib/day/scores";
 import { requireUser } from "@/lib/data/user";
 import { loadFoodDay, loadFoodRange } from "@/lib/food/data";
 import { ACTIVITIES, type ActivityKind } from "@/lib/fitness/activities";
@@ -70,16 +71,17 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
   const askedDay = typeof sp.d === "string" && DATE.test(sp.d) && sp.d <= today ? sp.d : today;
   const [from, to] = rangeOf(range, today, back, askedDay);
 
-  const [ctx, p, food, logs, workouts, foodDay] = await Promise.all([
+  const [ctx, p, food, logs, workouts, foodDay, scores] = await Promise.all([
     loadDayContext(user.id),
     loadProgress(user.id, today),
     loadFoodRange(user.id, from, to).catch(() => ({ tracking: true, days: {} as Awaited<ReturnType<typeof loadFoodRange>>["days"] })),
     loadDayLogRange(user.id, from, to),
     loadWorkoutDays(user.id, from, to),
     range === "day" ? loadFoodDay(user.id, askedDay).catch(() => null) : Promise.resolve(null),
+    loadScores(user.id, from, to).catch(() => new Map<string, SavedScore>()),
   ]);
   const target = ctx.showNumbers ? ctx.target : null;
-  const protein = ctx.showNumbers ? proteinTarget(ctx.draft.goals, ctx.weightKg) : null;
+  const protein = ctx.protein;
 
   return (
     <>
@@ -112,6 +114,7 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
           acts={logs.get(askedDay)?.fitness.acts ?? []}
           foodDay={foodDay}
           tracking={ctx.showNumbers}
+          score={askedDay < today ? (scores.get(askedDay) ?? null) : null}
         />
       ) : (
         <PeriodView
@@ -124,6 +127,7 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
           protein={protein}
           food={food.days}
           workouts={workouts}
+          scores={scores}
           activeMin={[...logs.values()].reduce((a, l) => a + l.fitness.acts.reduce((x, y) => x + y.min, 0), 0)}
         />
       )}
@@ -208,7 +212,9 @@ function DayView({
   acts,
   foodDay,
   tracking,
+  score,
 }: {
+  score: SavedScore | null;
   day: string;
   today: string;
   target: number | null;
@@ -226,6 +232,7 @@ function DayView({
   return (
     <>
       <Stepper label={label} prev={`/progress?r=day&d=${addDays(day, -1)}`} next={next} />
+      {score ? <PastScore score={score} /> : null}
       {tracking ? (
         <div className="grid gap-3 sm:grid-cols-2">
           <Meter kind="calories" icon={<Flame aria-hidden="true" className="size-4" />} title="קלוריות" value={eaten} target={target} unit="קל׳" />
@@ -273,7 +280,9 @@ function PeriodView({
   food,
   workouts,
   activeMin,
+  scores,
 }: {
+  scores: Map<string, SavedScore>;
   range: "week" | "month";
   back: number;
   from: string;
@@ -296,6 +305,9 @@ function PeriodView({
   const onTarget = target ? loggedK.filter((d) => d.value! <= target * 1.1 && d.value! >= target * 0.8).length : 0;
   const balance = target ? loggedK.reduce((a, d) => a + d.value! - target, 0) : 0;
   const marks = Object.entries(workouts).filter(([d]) => d >= from && d <= to);
+  const scoreDays = dates.map((d) => ({ date: d, value: scores.get(d)?.score ?? null }));
+  const scored = scoreDays.filter((d) => d.value !== null);
+  const avgScore = scored.length ? Math.round(scored.reduce((a, d) => a + d.value!, 0) / scored.length) : null;
   const wDone = marks.filter(([, w]) => w === "done" || w === "partial").length;
   const label =
     range === "month"
@@ -308,11 +320,18 @@ function PeriodView({
   return (
     <>
       <Stepper label={label} prev={`/progress?r=${range}&b=${back + 1}`} next={back > 0 ? `/progress?r=${range}${back > 1 ? `&b=${back - 1}` : ""}` : null} />
-      <dl className="grid grid-cols-3 gap-2.5">
+      <dl className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <Stat label="ציון יומי ממוצע" value={avgScore !== null ? String(avgScore) : "–"} />
         <Stat label="ממוצע קלוריות" value={target && avgK ? fmt(avgK) : "–"} />
         <Stat label="ממוצע חלבון" value={protein && avgP ? `${fmt(avgP)} ג׳` : "–"} />
         <Stat label="אימונים" value={`${wDone}/${marks.length}`} />
       </dl>
+      {scored.length ? (
+        <Card className="flex flex-col gap-3">
+          <h2 className="font-semibold">ציון יומי</h2>
+          <DayBars days={scoreDays} target={null} today={today} kind="score" label="ציון יומי לפי יום" />
+        </Card>
+      ) : null}
       {target ? (
         <Card className="flex flex-col gap-3">
           <div className="flex items-baseline justify-between gap-2">
@@ -361,5 +380,30 @@ function Stat({ label, value }: { label: string; value: string }) {
       <dt className="text-xs text-ink-muted">{label}</dt>
       <dd className="num mt-0.5 text-xl font-bold">{value}</dd>
     </div>
+  );
+}
+
+const PART_LABEL: Record<DailyPart, string> = { calories: "קלוריות", protein: "חלבון", fitness: "כושר", tasks: "משימות" };
+
+/** The score a past day ended with, as it was saved on that day. */
+function PastScore({ score }: { score: SavedScore }) {
+  return (
+    <section className="flex items-center gap-4 rounded-[var(--radius-card)] bg-night p-4 text-white shadow-[var(--shadow-card)]">
+      <div className="flex flex-col items-center leading-none">
+        <span className="num text-4xl font-bold">{score.score}</span>
+        <span className="mt-1 text-[11px] text-white/55">ציון יומי</span>
+      </div>
+      <dl className="grid flex-1 grid-cols-2 gap-x-3 gap-y-1 text-sm">
+        {(Object.keys(DAILY_WEIGHTS) as DailyPart[]).map((k) => (
+          <div key={k} className="flex justify-between gap-1">
+            <dt className="text-white/65">{PART_LABEL[k]}</dt>
+            <dd className="num">
+              {score.points[k] ?? "–"}
+              <span className="text-xs text-white/45">/{DAILY_WEIGHTS[k]}</span>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }

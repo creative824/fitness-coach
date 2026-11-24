@@ -1,10 +1,12 @@
 import "server-only";
-import { z } from "zod";
 import { foodItemSchema, type FoodItem } from "./items";
+import { computeMeal, itemsOf, parseUnderstanding, UNDERSTAND_SCHEMA, type UnderstandResult } from "./recipe";
 
 /**
- * Estimates the items of a meal from free text with Google Gemini (free tier of Google AI
- * Studio). Only the meal text is sent: no name, email, profile or health data.
+ * Reads a meal from free text with Google Gemini (free tier of Google AI Studio). Gemini only
+ * understands the words (structured output): the dish, its ingredients and amounts, the units
+ * a recipe made and how many were eaten. The nutrition is counted in code (recipe.ts).
+ * Only the meal text is sent: no name, email, profile or health data.
  * Without GEMINI_API_KEY the log still works; items are then entered by hand.
  */
 
@@ -45,78 +47,33 @@ function thinkingFor(model: string) {
   return model.startsWith("gemini-2.5") ? { thinkingConfig: { thinkingBudget: 0 } } : {};
 }
 
-const SYSTEM = `אתה עוזר להעריך מה אכל המשתמש מתוך תיאור חופשי בעברית.
-החזר רשימת פריטים. לכל פריט: שם קצר בעברית, כמות ויחידה אם נאמרו או אם אפשר להניח באופן סביר, אופן הכנה אם רלוונטי,
-טווח קלוריות משוער (kcal_min עד kcal_max, טווח ריאלי ולא מספר אחד), הערכת חלבון, פחמימות ושומן בגרמים, ורמת ודאות (low/medium/high).
-אם הכמות לא ידועה, הנח מנה ממוצעת, הרחב את הטווח וסמן ודאות נמוכה.
-אם חסר פרט שמשנה מאוד את ההערכה (למשל כמות, או טיגון מול אפייה), כתוב שאלת הבהרה אחת קצרה בעברית בשדה question. אחרת השאר אותו ריק.
-אם הטקסט אינו תיאור של אוכל או שתייה, החזר not_food=true ורשימה ריקה.
-אל תיתן ייעוץ רפואי, אל תשפוט ואל תמליץ לאכול פחות.`;
+const SYSTEM = `אתה מבין תיאורי אוכל חופשיים בעברית. אתה לא מחשב ערכים תזונתיים של הארוחה: את החישוב עושה קוד.
+החזר רק מה שהבנת:
+- dish: שם המאכל או הארוחה בקצרה.
+- kind: "single" לארוחה רגילה או פריטים בודדים, "recipe" למתכון שהוכן ואז חולק ליחידות (כדורים, פרוסות, עוגיות), "pot_portion" לחלק מסיר או תבנית.
+- ingredients: כל מרכיב או פריט, עם שם קצר בעברית כפי שנקרא בדרך כלל (למשל "שוקולד מריר", "חמאת בוטנים", "קורנפלקס"), כמות ויחידה אם נאמרו.
+  יחידות מותרות: g, kg, ml, l, pc, slice, tbsp, tsp, cup, bowl, plate, serving, handful, package.
+  "חבילה", "חפיסה", "צנצנת שלמה", "קופסה שלמה" = package עם qty של מספר האריזות. אם המשקל של האריזה נאמר, החזר אותו בגרמים במקום package.
+  approx=true כשהמשתמש אמר "בערך", "כמעט", "בסביבות".
+  אם הכמות לא נאמרה, qty ו-unit הם null. אל תמציא כמויות.
+  לכל מרכיב תן גם הערכה ל-100 גרם (kcal_100, protein_100, carbs_100, fat_100). הערכה זו משמשת רק כשאין מקור טוב יותר.
+- yield_min/yield_max: לכמה יחידות יצא המתכון (למשל 40), ו-unit_name לשם היחידה ("כדורים"). null אם לא נאמר.
+- eaten_min/eaten_max: כמה יחידות נאכלו (למשל 6 ו-7 עבור "6-7"). ב-pot_portion: החלק מהסיר כשבר (רבע = 0.25). null אם לא נאמר.
+אם הטקסט אינו אוכל או שתייה, החזר not_food=true ורשימה ריקה. אל תיתן ייעוץ רפואי ואל תשפוט.`;
 
-const RESPONSE_SCHEMA = {
-  type: "OBJECT",
-  properties: {
-    not_food: { type: "BOOLEAN" },
-    question: { type: "STRING", nullable: true },
-    items: {
-      type: "ARRAY",
-      items: {
-        type: "OBJECT",
-        properties: {
-          item_name: { type: "STRING" },
-          quantity: { type: "NUMBER", nullable: true },
-          unit: { type: "STRING", nullable: true },
-          preparation: { type: "STRING", nullable: true },
-          kcal_min: { type: "INTEGER" },
-          kcal_max: { type: "INTEGER" },
-          protein_g: { type: "NUMBER" },
-          carbs_g: { type: "NUMBER" },
-          fat_g: { type: "NUMBER" },
-          confidence: { type: "STRING", enum: ["low", "medium", "high"] },
-        },
-        required: ["item_name", "kcal_min", "kcal_max", "protein_g", "carbs_g", "fat_g", "confidence"],
-      },
-    },
-  },
-  required: ["not_food", "items"],
-};
+export type UnderstandMealResult = UnderstandResult | { ok: false; reason: "no_key" | "bad_key" | "busy" | "limit" };
 
-const replySchema = z.object({
-  not_food: z.boolean().optional().default(false),
-  question: z.string().max(200).nullable().optional(),
-  items: z.array(z.unknown()).max(30),
-});
-
-/** Parses the model's JSON; drops items that do not validate instead of failing the meal. */
-export function parseEstimate(raw: string): EstimateResult {
-  let json: unknown;
-  try {
-    json = JSON.parse(raw);
-  } catch {
-    return { ok: false, reason: "failed" };
-  }
-  const reply = replySchema.safeParse(json);
-  if (!reply.success) return { ok: false, reason: "failed" };
-  if (reply.data.not_food) return { ok: false, reason: "not_food" };
-  const items = reply.data.items.flatMap((i) => {
-    const p = foodItemSchema.safeParse(i);
-    return p.success ? [p.data] : [];
-  });
-  if (!items.length) return { ok: false, reason: "failed" };
-  const q = reply.data.question?.trim();
-  return { ok: true, items, question: q ? q : null };
-}
-
-export async function estimateMeal(text: string): Promise<EstimateResult> {
+/** Sends only the meal text to Gemini and reads back what it understood (no totals). */
+export async function understandMeal(text: string): Promise<UnderstandMealResult> {
   // Pasted keys often carry a space, a newline or quotes.
   const key = process.env.GEMINI_API_KEY?.trim().replace(/^["']|["']$/g, "");
   if (!key) return { ok: false, reason: "no_key" };
-  let last: EstimateResult = { ok: false, reason: "failed" };
+  let last: UnderstandMealResult = { ok: false, reason: "failed" };
   for (const model of MODELS) {
     const body = JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM }] },
       contents: [{ role: "user", parts: [{ text: text.slice(0, 1000) }] }],
-      generationConfig: { temperature: 0.2, responseMimeType: "application/json", responseSchema: RESPONSE_SCHEMA, ...thinkingFor(model) },
+      generationConfig: { temperature: 0.1, responseMimeType: "application/json", responseSchema: UNDERSTAND_SCHEMA, ...thinkingFor(model) },
     });
     try {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
@@ -129,7 +86,7 @@ export async function estimateMeal(text: string): Promise<EstimateResult> {
       if (!res.ok) {
         const detail = (await res.text().catch(() => "")).slice(0, 500);
         const kind = classifyGeminiError(res.status, detail);
-        console.error("estimateMeal failed", model, res.status, detail);
+        console.error("understandMeal failed", model, res.status, detail);
         if (kind === "bad_key") return { ok: false, reason: "bad_key" };
         if (kind === "failed") return { ok: false, reason: "failed" };
         if (kind === "busy") last = { ok: false, reason: "busy" };
@@ -141,15 +98,32 @@ export async function estimateMeal(text: string): Promise<EstimateResult> {
           ?.filter((p) => !p.thought)
           .map((p) => p.text ?? "")
           .join("") ?? "";
-      const result = parseEstimate(raw);
+      const result = parseUnderstanding(raw);
       if (result.ok || result.reason === "not_food") return result;
-      console.error("estimateMeal unreadable reply", model, raw.slice(0, 300));
+      console.error("understandMeal unreadable reply", model, raw.slice(0, 300));
       last = result;
     } catch (e) {
       // Timeout or network error: trying more models would only make the user wait longer.
-      console.error("estimateMeal error", model, e instanceof Error ? e.message : e);
+      console.error("understandMeal error", model, e instanceof Error ? e.message : e);
       return { ok: false, reason: "busy" };
     }
   }
   return last;
+}
+
+/**
+ * Items for free text: the AI understands it, the code counts it (recipe.ts), with the usual
+ * portions and package sizes where an amount is missing. The ranges and the confidence say how
+ * sure the count is.
+ */
+export async function estimateMeal(text: string): Promise<EstimateResult> {
+  const u = await understandMeal(text);
+  if (!u.ok) return u.reason === "limit" ? { ok: false, reason: "limit" } : { ok: false, reason: u.reason };
+  const m = computeMeal(u.understanding);
+  const items = itemsOf(m).flatMap((i) => {
+    const p = foodItemSchema.safeParse(i);
+    return p.success ? [p.data] : [];
+  });
+  if (!items.length) return { ok: false, reason: "failed" };
+  return { ok: true, items, question: m.questions[0]?.text ?? null };
 }

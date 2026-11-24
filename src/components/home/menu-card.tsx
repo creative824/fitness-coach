@@ -4,6 +4,9 @@ import { Check, ChevronDown, Feather, List, Loader2, Minus, Pencil, Plus, Refres
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 import { FoodEntry, useFoodEntry } from "@/components/food/food-entry";
+import type { SaveFood } from "@/components/food/recipe-calculator";
+import type { UnderstandMealResult } from "@/lib/food/estimate";
+import type { SavedFood } from "@/lib/food/saved";
 import { chooseMeal, logOtherFood, setMealEaten, setSlotKcal, swapMeal, swapWholeMenu, type MenuResult } from "@/lib/menu/actions";
 import type { MenuView, SlotView } from "@/lib/menu/view";
 import { fmt, useDay } from "./day-context";
@@ -38,12 +41,18 @@ export function MenuCard({
   saved,
   aiEnabled,
   api = SERVER_API,
+  savedFoods = [],
+  recipes,
 }: {
   initial: MenuView;
   showNumbers: boolean;
   saved: boolean;
   aiEnabled: boolean;
   api?: MenuApi;
+  /** The user's own recipes and regular foods, for "something else". */
+  savedFoods?: SavedFood[];
+  /** The demo's stand-ins for reading and saving a recipe. */
+  recipes?: { understand: ((t: string) => Promise<UnderstandMealResult>) | null; save: SaveFood | null };
 }) {
   const { setEatenKcal, setEatenProtein } = useDay();
   const [menu, setMenu] = useState(initial);
@@ -149,6 +158,8 @@ export function MenuCard({
             aiEnabled={aiEnabled}
             showNumbers={showNumbers}
             saved={saved}
+            savedFoods={savedFoods}
+            recipes={recipes}
             onLog={api.other}
             onClose={() => setOther(false)}
             onSaved={(r) => {
@@ -333,6 +344,8 @@ function OtherFood({
   aiEnabled,
   showNumbers,
   saved,
+  savedFoods,
+  recipes,
   onLog,
   onClose,
   onSaved,
@@ -341,11 +354,13 @@ function OtherFood({
   aiEnabled: boolean;
   showNumbers: boolean;
   saved: boolean;
+  savedFoods: SavedFood[];
+  recipes?: { understand: ((t: string) => Promise<UnderstandMealResult>) | null; save: SaveFood | null };
   onLog: MenuApi["other"];
   onClose: () => void;
   onSaved: (r: Extract<MenuResult, { ok: true }>) => void;
 }) {
-  const entry = useFoodEntry();
+  const entry = useFoodEntry(savedFoods);
   const [slot, setSlot] = useState<number | null>(slots[0]?.index ?? null);
   const [note, setNote] = useState<string | null>(null);
   const [saving, startSave] = useTransition();
@@ -371,7 +386,7 @@ function OtherFood({
           <X aria-hidden="true" className="size-4" />
         </button>
       </div>
-      <FoodEntry entry={entry} aiEnabled={aiEnabled} showNumbers={showNumbers} autoFocus placeholder="למשל: 2 פרוסות לחם עם חביתה וקפה הפוך" />
+      <FoodEntry entry={entry} aiEnabled={aiEnabled} showNumbers={showNumbers} autoFocus placeholder="למשל: 2 פרוסות לחם עם חביתה וקפה הפוך" {...(recipes ?? {})} />
       <fieldset className="flex flex-wrap gap-1.5">
         <legend className="mb-1.5 text-xs text-ink-muted">במקום איזו ארוחה?</legend>
         {slots.map((s) => (

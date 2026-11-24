@@ -3,17 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense } from "react";
-import { Dumbbell, Home, LineChart, MessageCircle, Trophy, UserRound } from "lucide-react";
+import { Home, LineChart, MessageCircle, Trophy, UserRound } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { getDictionary } from "@/lib/i18n/he";
 
 const t = getDictionary();
 
-/** Five places, one tap each: home, tracking, fitness, competitions and the profile. The coach opens from home. */
+/** Four places, one tap each: home (with today's workout), tracking, competitions and the profile. The coach opens from home. */
 const items = [
   { href: "/today", label: t.nav.today, Icon: Home },
   { href: "/progress", label: t.nav.progress, Icon: LineChart },
-  { href: "/plan", label: t.nav.plan, Icon: Dumbbell },
   { href: "/competitions", label: t.nav.competitions, Icon: Trophy },
   { href: "/profile", label: t.nav.profile, Icon: UserRound },
 ] as const;

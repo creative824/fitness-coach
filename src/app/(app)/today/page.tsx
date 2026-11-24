@@ -6,25 +6,29 @@ import { FaceAvatar } from "@/components/ui/face-avatar";
 import type { AvatarConfig } from "@/lib/avatar";
 import { CompetitionsStrip } from "@/components/home/competitions-strip";
 import { DayProvider } from "@/components/home/day-context";
-import { FitnessCard, type SmallTask, type WorkoutBlock } from "@/components/home/fitness-card";
+import { FitnessCard, type SmallTask } from "@/components/home/fitness-card";
+import { TodayWorkout } from "@/components/workout/today-workout";
 import { MenuCard } from "@/components/home/menu-card";
 import { DaySummary } from "@/components/home/day-summary";
 import { DayExtras } from "@/components/home/day-extras";
 import { ButtonLink } from "@/components/ui/button";
 import { EmptyState, LoadingState } from "@/components/ui/states";
-import { EXERCISES } from "@/content/exercises";
 import { competitionCards } from "@/lib/competitions/data";
 import { loadDayContext } from "@/lib/day/context";
-import { proteinTarget } from "@/lib/day/scores";
-import { smartTasks, type SmartTaskInput } from "@/lib/day/smart-tasks";
+import { loadScores } from "@/lib/day/score-data";
+import { minutesFor, smartTasks, tasksByIds, type SmartTaskInput, type SmartTaskKind } from "@/lib/day/smart-tasks";
 import { requireUser } from "@/lib/data/user";
 import { loadFoodDay } from "@/lib/food/data";
+import { loadSavedFoods } from "@/lib/food/saved-data";
 import { getDictionary } from "@/lib/i18n/he";
-import { loadDayLog } from "@/lib/menu/data";
+import { loadDayLog, loadDayLogRange, rememberTasks } from "@/lib/menu/data";
 import { toView } from "@/lib/menu/view";
 import { generateWeekPlan, loadDayTasks, loadWeek } from "@/lib/plan/data";
 import { PER_SIDE } from "@/lib/plan/duration";
-import { weekdayOf, weekStartOf } from "@/lib/plan/week";
+import { loadWorkoutPool, type WorkoutPool } from "@/lib/workout/data";
+import type { ExerciseCard } from "@/lib/workout/today";
+import { groupOf, type WorkoutItem } from "@/lib/workout/build";
+import { addDays, weekdayOf, weekStartOf } from "@/lib/plan/week";
 import { bmiOf } from "@/lib/progress/bmi";
 import { loadRecentWeights } from "@/lib/progress/data";
 import { loadWaterToday } from "@/lib/water/data";
@@ -36,7 +40,6 @@ const s = t.screens.today;
 
 export const metadata: Metadata = { title: s.title };
 
-const easierName = new Map(EXERCISES.map((e) => [e.slug, e.name_he]));
 const longDate = new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
 
 export default function TodayPage() {
@@ -87,40 +90,40 @@ async function Today() {
     loadFoodDay(user.id, date).catch(() => null),
     loadWaterToday(user.id).catch(() => null),
     ctx.hideWeight ? Promise.resolve([]) : loadRecentWeights(user.id, date).catch(() => []),
+    loadScores(user.id, addDays(date, -7), addDays(date, -1)).catch(() => new Map()),
+    loadWorkoutPool(ctx.draft).catch((): WorkoutPool => ({ pool: [], cards: {}, ids: new Map() })),
+    loadDayLogRange(user.id, addDays(date, -7), addDays(date, -1)).catch(() => new Map() as Awaited<ReturnType<typeof loadDayLogRange>>),
+    loadFoodDay(user.id, addDays(date, -1)).catch(() => null),
+    loadSavedFoods(user.id).catch(() => []),
   ]);
   // The week's plan is made on its own the first time the week is opened.
   if (!week) {
     const made = await generateWeekPlan(user.id, weekStart).catch(() => null);
     if (made?.ok) [week, tasks] = await Promise.all([loadWeek(user.id, weekStart).catch(() => null), tasksOf()]);
   }
-  const [day, food, water, weights] = await rest;
+  const [day, food, water, weights, scores, pool, past7, yFood, savedFoods] = await rest;
+  const past = [...scores.values()].map((x) => x.score);
+  const history = { yesterday: scores.get(addDays(date, -1))?.score ?? null, weekAvg: past.length ? Math.round(past.reduce((a, b) => a + b, 0) / past.length) : null };
 
+  // Today's workout: the one the user set on the home screen, or else the plan's.
   const planDay = week?.plan.days[weekdayOf(date)];
   const w = planDay?.workout ?? null;
-  const blocks: WorkoutBlock[] = (w?.blocks ?? []).flatMap((b, index) => {
+  const cards: Record<string, ExerciseCard> = { ...pool.cards };
+  const planItems: WorkoutItem[] = (w?.blocks ?? []).flatMap((b) => {
     const ex = week?.exercises.get(b.exercise_id);
     if (!ex) return [];
-    return [
-      {
-        index,
-        slug: ex.slug,
-        name: ex.name_he,
-        sets: b.sets,
-        reps: b.reps,
-        seconds: b.seconds,
-        rest: b.rest_seconds,
-        perSide: PER_SIDE.has(ex.slug),
-        primary: ex.primary_muscles,
-        steps: ex.instructions_he.split("\n").filter(Boolean),
-        cautions: ex.cautions_he,
-        easier: ex.easier_slug ? (easierName.get(ex.easier_slug) ?? null) : null,
-      },
-    ];
+    cards[ex.slug] ??= { name: ex.name_he, primary: ex.primary_muscles, steps: ex.instructions_he.split("\n").filter(Boolean), cautions: ex.cautions_he, perSide: PER_SIDE.has(ex.slug) };
+    const base = { slug: ex.slug, sets: b.sets, rest: b.rest_seconds };
+    return [b.seconds ? { ...base, seconds: b.seconds } : { ...base, reps: b.reps ?? 10 }];
   });
-  const workout = w && blocks.length ? { title: w.title, minutes: w.estimated_minutes, blocks } : null;
-  const doneBlocks = blocks.filter((b) => day.fitness.done.includes(`ex:${b.index}`)).length;
+  const own = day.fitness.workout;
+  const todayWorkout = own ?? (planItems.length ? { minutes: null, items: planItems } : null);
+  const exCount = todayWorkout?.items.length ?? 0;
+  const doneBlocks = day.fitness.done.filter((k) => k.startsWith("ex:") && Number(k.slice(3)) < exCount).length;
 
-  const confirmedMeals = food?.logs.filter((l) => l.status === "confirmed").length ?? 0;
+  // Protein eaten at each meal, so "protein at breakfast" ticks itself.
+  const mealProtein = (meal: string) =>
+    (food?.logs ?? []).filter((l) => l.status === "confirmed" && l.mealType === meal).reduce((a, l) => a + l.items.reduce((x, i) => x + (i.protein_g ?? 0), 0), 0);
   const taskInput: Omit<SmartTaskInput, "workoutToday"> = {
     goals: ctx.draft.goals,
     experience: ctx.draft.experience,
@@ -133,38 +136,78 @@ async function Today() {
     needsDoctor: ctx.needsDoctor,
     hideNumbers: !ctx.showNumbers,
     weeksIn: ctx.weeksIn,
+    proteinTarget: ctx.protein,
   };
-  const small: SmallTask[] = smartTasks({ ...taskInput, workoutToday: Boolean(workout) }).map((t) => ({
+  // The small tasks: the ones given earlier today, or a fresh set chosen from the last days'
+  // tasks, how yesterday's food went and today's workout, kept with the day.
+  const groups = [...new Set((todayWorkout?.items ?? []).flatMap((i) => {
+    const e = pool.pool.find((x) => x.slug === i.slug);
+    return e ? [groupOf(e)] : [];
+  }))];
+  const fullInput: SmartTaskInput = { ...taskInput, workoutToday: Boolean(todayWorkout), workoutGroups: groups, date };
+  let given = day.fitness.tasks?.length ? tasksByIds(fullInput, day.fitness.tasks) : [];
+  if (!given.length) {
+    const history = [...past7.entries()]
+      .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+      .map(([, d]) => ({ given: d.fitness.tasks ?? [], done: d.fitness.done.filter((k) => k.startsWith("t:")).map((k) => k.slice(2)) }));
+    const yKcal = mid(yFood?.totals.kcal);
+    const satisfied: SmartTaskKind[] = [];
+    if (mealProtein("breakfast") >= 15) satisfied.push("protein_breakfast");
+    if (mealProtein("lunch") >= 20) satisfied.push("protein_lunch");
+    if (ctx.protein && (food?.totals.protein ?? 0) >= ctx.protein / 2) satisfied.push("protein_half");
+    for (const k of ["walk", "brisk_walk", "jog", "aerobic", "stretch"] as const) if (minutesFor(k, day.fitness.acts) >= 10) satisfied.push(k);
+    given = smartTasks({
+      ...fullInput,
+      history,
+      satisfied,
+      yesterday: yFood ? { kcal: yKcal, kcalTarget: ctx.target, protein: yFood.totals.protein } : null,
+    });
+    if (day.saved && given.length) await rememberTasks(user.id, date, given.map((t) => t.id)).catch(() => {});
+  }
+  const small: SmallTask[] = given.map((t) => ({
     id: t.id,
     kind: t.kind,
     title: t.title,
     why: t.why,
     minutes: t.minutes,
     grams: t.grams,
-    auto: (t.kind === "log_food" && confirmedMeals >= 3) || (t.kind === "protein" && Boolean(t.grams) && (food?.totals.protein ?? 0) >= (t.grams ?? 0)),
+    auto:
+      (t.kind === "protein_breakfast" && mealProtein("breakfast") >= 15) ||
+      (t.kind === "protein_lunch" && mealProtein("lunch") >= 20) ||
+      (t.kind === "protein_half" && Boolean(t.grams) && (food?.totals.protein ?? 0) >= (t.grams ?? 0)),
   }));
 
   const waterTask = tasks.tasks.find((x) => x.type === "water") ?? null;
   const waterTarget = water
-    ? dailyWaterTargetMl({ weightKg: water.weightKg, workoutToday: Boolean(workout), medicalRestriction: water.medicalRestriction })
+    ? dailyWaterTargetMl({ weightKg: water.weightKg, workoutToday: Boolean(todayWorkout), medicalRestriction: water.medicalRestriction })
     : null;
 
-  const protein = ctx.showNumbers ? proteinTarget(ctx.draft.goals, ctx.weightKg) : null;
+  const protein = ctx.protein;
   const weight = ctx.hideWeight ? null : { history: weights, startKg: ctx.draft.weight_kg ?? ctx.weightKg, heightCm: ctx.heightCm, today: date };
 
   return (
-    <DayProvider eatenKcal={mid(food?.totals.kcal) ?? 0} eatenProtein={food?.totals.protein ?? 0} workout={{ done: doneBlocks, total: blocks.length }} activeMinutes={day.fitness.acts.reduce((a, x) => a + x.min, 0)}>
+    <DayProvider eatenKcal={mid(food?.totals.kcal) ?? 0} eatenProtein={food?.totals.protein ?? 0} workout={{ done: doneBlocks, total: exCount }} activeMinutes={day.fitness.acts.reduce((a, x) => a + x.min, 0)}>
       <Header name={name} date={date} seed={user.id} avatar={ctx.draft.avatar} />
       <Suspense fallback={<div className="h-[76px] animate-pulse rounded-[var(--radius-card)] bg-white/60" aria-hidden="true" />}>
         <Competitions userId={user.id} today={date} me={{ seed: user.id, avatar: ctx.draft.avatar }} />
       </Suspense>
-      <DaySummary target={ctx.showNumbers ? ctx.target : null} proteinTarget={protein} minutes={minutes} />
+      <DaySummary target={ctx.showNumbers ? ctx.target : null} proteinTarget={protein} minutes={minutes} history={history} persist={day.saved} />
       <DayExtras
         water={water ? { drank: water.logs.reduce((a, b) => a + b, 0), target: waterTarget, vesselMl: water.vesselMl, taskId: waterTask?.id ?? null } : null}
         weight={weight}
       />
-      <MenuCard initial={toView(day.menu, ctx.profile)} showNumbers={ctx.showNumbers} saved={day.saved} aiEnabled={Boolean(process.env.GEMINI_API_KEY)} />
-      <FitnessCard workout={workout} tasks={small} initial={day.fitness} weightKg={ctx.weightKg} saved={day.saved} />
+      <MenuCard initial={toView(day.menu, ctx.profile)} showNumbers={ctx.showNumbers} saved={day.saved} aiEnabled={Boolean(process.env.GEMINI_API_KEY)} savedFoods={savedFoods} />
+      <TodayWorkout
+        initial={todayWorkout}
+        title={own ? null : (w?.title ?? null)}
+        pool={pool.pool}
+        cards={cards}
+        done={day.fitness.done}
+        seed={`${user.id}:${date}`}
+        level={ctx.lowIntensityOnly ? "beginner" : (ctx.draft.experience ?? "beginner")}
+        saved={day.saved}
+      />
+      <FitnessCard tasks={small} initial={day.fitness} weightKg={ctx.weightKg} saved={day.saved} />
     </DayProvider>
   );
 }

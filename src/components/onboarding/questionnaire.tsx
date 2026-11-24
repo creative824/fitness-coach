@@ -208,7 +208,7 @@ export function Questionnaire({ initial, initialStep }: { initial: OnboardingDra
         </Card>
       )}
 
-      {step === SUMMARY && <Summary draft={draft} onEdit={(i) => setStep(i)} />}
+      {step === SUMMARY && <Summary draft={draft} onEdit={(i) => setStep(i)} onGoal={(patch) => setDraft((d) => ({ ...d, ...patch }))} />}
 
       {completeError ? (
         <p role="alert" className="rounded-xl bg-danger-soft px-4 py-3 text-sm text-danger">
@@ -285,7 +285,7 @@ function AvatarStep({ draft, onChange }: { draft: OnboardingDraft; onChange: (v:
   );
 }
 
-function Summary({ draft, onEdit }: { draft: OnboardingDraft; onEdit: (step: number) => void }) {
+function Summary({ draft, onEdit, onGoal }: { draft: OnboardingDraft; onEdit: (step: number) => void; onGoal: (patch: Partial<OnboardingDraft>) => void }) {
   const safety = screenSafety(draft);
   const goals = allowedGoals(draft.goals, safety);
   const list = (xs: string[]) => (xs.length ? xs.join(", ") : "—");
@@ -357,7 +357,7 @@ function Summary({ draft, onEdit }: { draft: OnboardingDraft; onEdit: (step: num
           {s.edit}
         </button>
       </Card>
-      <CalorieTargetCard draft={draft} safety={safety} goals={goals} />
+      <CalorieTargetCard draft={draft} safety={safety} goals={goals} onChange={onGoal} />
       {rows.map((section) => (
         <Card key={section.step} className="flex flex-col gap-3">
           <div className="flex items-center justify-between">

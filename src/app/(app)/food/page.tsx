@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { FoodList } from "@/components/food/food-list";
 import { FoodLogger } from "@/components/food/food-logger";
+import { loadSavedFoods } from "@/lib/food/saved-data";
 import { CalorieRing } from "@/components/home/calorie-ring";
 import { InfoButton } from "@/components/knowledge/info-button";
 import { Card } from "@/components/ui/card";
@@ -30,7 +31,7 @@ export default function FoodPage() {
 async function Food() {
   const user = await requireUser();
   const { date, minutes } = localDay(new Date());
-  const [day, ctx] = await Promise.all([loadFoodDay(user.id, date), loadDayContext(user.id)]);
+  const [day, ctx, savedFoods] = await Promise.all([loadFoodDay(user.id, date), loadDayContext(user.id), loadSavedFoods(user.id).catch(() => [])]);
   if (!day.available) {
     return (
       <EmptyState
@@ -64,7 +65,7 @@ async function Food() {
           </dl>
         </section>
       ) : null}
-      <FoodLogger aiEnabled={Boolean(process.env.GEMINI_API_KEY)} tracking={numbers} defaultMeal={mealTypeAt(minutes)} />
+      <FoodLogger aiEnabled={Boolean(process.env.GEMINI_API_KEY)} tracking={numbers} defaultMeal={mealTypeAt(minutes)} savedFoods={savedFoods} />
       <Card className="flex flex-col gap-3">
         <div className="flex items-center justify-between gap-2">
           <h2 className="font-semibold">מה נאכל היום</h2>

@@ -1,32 +1,14 @@
 "use client";
 
-import { Beef, Carrot, Check, Clock, Footprints, Info, Moon, NotebookPen, Plus, StretchHorizontal, Trash2, TriangleAlert, X } from "lucide-react";
+import { Apple, Beef, Carrot, Check, Cookie, Dumbbell, Egg, Footprints, GlassWater, HeartPulse, Plus, StretchHorizontal, Trash2, Utensils, Wheat, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState, useTransition } from "react";
-import { ExerciseDemo } from "@/components/exercise/exercise-demo";
-import { ExerciseLoop } from "@/components/exercise/exercise-loop";
-import { MUSCLES } from "@/content/muscles";
+import { useEffect, useState, useTransition } from "react";
 import { ACTIVITIES, ACTIVITY_KINDS, activityKcal, MINUTE_CHOICES, type ActivityKind } from "@/lib/fitness/activities";
-import { addActivity, removeActivity, setExerciseDone, type FitnessResult } from "@/lib/fitness/actions";
+import { addActivity, removeActivity, type FitnessResult } from "@/lib/fitness/actions";
 import type { FitnessState } from "@/lib/menu/data";
-import { minutesFor, type SmartTaskKind } from "@/lib/day/smart-tasks";
+import { MOVE_TASKS, minutesFor, type SmartTaskKind } from "@/lib/day/smart-tasks";
 import { setSmartTaskDone } from "@/lib/fitness/actions";
 import { useDay } from "./day-context";
-
-export interface WorkoutBlock {
-  index: number;
-  slug: string;
-  name: string;
-  sets: number;
-  reps?: number;
-  seconds?: number;
-  rest: number;
-  perSide: boolean;
-  primary: string[];
-  steps: string[];
-  cautions: string | null;
-  easier: string | null;
-}
 
 export interface SmallTask {
   id: string;
@@ -40,37 +22,41 @@ export interface SmallTask {
   auto: boolean;
 }
 
-const MOVEMENT_KINDS: SmartTaskKind[] = ["walk", "brisk_walk", "jog", "stretch", "steps_break"];
-const MOVE_KINDS = new Set<SmartTaskKind>(MOVEMENT_KINDS);
-const planType = (k: SmartTaskKind) => (MOVEMENT_KINDS.includes(k) ? "movement" : k === "sleep" ? "recovery" : "habit");
+const MOVE_KINDS = new Set<SmartTaskKind>(MOVE_TASKS);
+const planType = (k: SmartTaskKind) => (MOVE_KINDS.has(k) ? "movement" : "habit");
 const TASK_ICON: Record<SmartTaskKind, typeof Footprints> = {
   walk: Footprints,
   brisk_walk: Footprints,
   jog: Footprints,
   steps_break: Footprints,
+  aerobic: HeartPulse,
+  legs: Dumbbell,
+  pushups: Dumbbell,
+  cooldown: StretchHorizontal,
   stretch: StretchHorizontal,
-  protein: Beef,
-  log_food: NotebookPen,
+  protein_breakfast: Egg,
+  protein_lunch: Beef,
+  protein_half: Beef,
   veg: Carrot,
-  sleep: Moon,
+  fruit: Apple,
+  fiber: Wheat,
+  swap_drink: GlassWater,
+  real_meal: Utensils,
+  light_dinner: Utensils,
+  energy_snack: Cookie,
 };
 
-const muscleName = new Map<string, string>(MUSCLES.map((m) => [m.id, m.name_he]));
-
 /**
- * Today's fitness: the workout's exercises as big tiles (the animation, then sets × reps in
- * large type), the day's small movement and recovery tasks, and general activities the user
- * adds ("walked 15 minutes").
+ * The day's small movement and food tasks, and general activities the user adds ("walked 15
+ * minutes"). Today's workout has its own card (TodayWorkout).
  */
 export function FitnessCard({
-  workout,
   tasks,
   initial,
   weightKg,
   saved,
   demo = false,
 }: {
-  workout: { title: string; minutes: number; blocks: WorkoutBlock[] } | null;
   tasks: SmallTask[];
   initial: FitnessState;
   weightKg: number | null;
@@ -78,18 +64,14 @@ export function FitnessCard({
   /** Keep changes in the page only (the demo without an account). */
   demo?: boolean;
 }) {
-  const { setWorkout, setActiveMinutes, setActions, setTasks, eatenProtein } = useDay();
+  const { workout, setActiveMinutes, setActions, setTasks, eatenProtein } = useDay();
   const [fit, setFit] = useState(initial);
-  const [sheet, setSheet] = useState<WorkoutBlock | null>(null);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState(false);
   const [, start] = useTransition();
 
-  const total = workout?.blocks.length ?? 0;
-  const isDone = (b: WorkoutBlock) => fit.done.includes(`ex:${b.index}`);
-  const doneCount = workout?.blocks.filter(isDone).length ?? 0;
-
-  useEffect(() => setWorkout({ done: doneCount, total }), [doneCount, total, setWorkout]);
+  // The workout's exercises are counted by "האימון שלך היום"; they add up with the tasks here.
+  const { done: doneCount, total } = workout;
   useEffect(() => setActiveMinutes(fit.acts.reduce((s, a) => s + a.min, 0)), [fit.acts, setActiveMinutes]);
 
   function run(next: FitnessState, call: () => Promise<FitnessResult>) {
@@ -107,16 +89,10 @@ export function FitnessCard({
     });
   }
 
-  function toggle(b: WorkoutBlock) {
-    const key = `ex:${b.index}`;
-    const done = !isDone(b);
-    run({ ...fit, done: done ? [...fit.done, key] : fit.done.filter((k) => k !== key) }, () => setExerciseDone(b.index, done, total));
-  }
-
   /** Movement tasks fill up from the activities added; the rest are ticked by hand (or done automatically). */
   const progressOf = (t: SmallTask) => (t.minutes ? Math.min(t.minutes, minutesFor(t.kind, fit.acts)) : 0);
   const isTaskDone = (t: SmallTask) =>
-    t.auto || fit.done.includes(`t:${t.id}`) || (t.minutes ? progressOf(t) >= t.minutes : false) || (t.kind === "protein" && Boolean(t.grams) && eatenProtein >= (t.grams ?? 0));
+    t.auto || fit.done.includes(`t:${t.id}`) || (t.minutes ? progressOf(t) >= t.minutes : false) || (t.kind === "protein_half" && Boolean(t.grams) && eatenProtein >= (t.grams ?? 0));
   const tasksDone = tasks.filter(isTaskDone).length;
   useEffect(() => setActions({ done: doneCount + tasksDone, total: total + tasks.length }), [doneCount, tasksDone, total, tasks.length, setActions]);
   const moves = tasks.filter((t) => MOVE_KINDS.has(t.kind));
@@ -142,32 +118,11 @@ export function FitnessCard({
       <header className="flex items-center justify-between gap-2">
         <div className="flex flex-col">
           <h2 id="fit-title" className="text-lg font-semibold">
-            כושר היום
+            משימות ופעילות
           </h2>
-          <span className="text-xs text-ink-muted">
-            {workout ? (
-              <>
-                {workout.title} · <Clock aria-hidden="true" className="inline size-3" /> <span className="num">{workout.minutes}</span> דק׳
-              </>
-            ) : (
-              "יום בלי אימון כוח. אפשר להוסיף פעילות קלה."
-            )}
-          </span>
+          <span className="text-xs text-ink-muted">משימות קטנות להיום, ופעילות שעשית מחוץ לאימון.</span>
         </div>
-        {workout ? (
-          <span className="num rounded-full bg-accent px-3 py-1 text-sm font-semibold text-ink">
-            {doneCount}/{total}
-          </span>
-        ) : null}
       </header>
-
-      {workout ? (
-        <ol className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-          {workout.blocks.map((b) => (
-            <ExerciseTile key={b.index} b={b} done={isDone(b)} saved={saved} onOpen={() => setSheet(b)} onToggle={() => toggle(b)} />
-          ))}
-        </ol>
-      ) : null}
 
       {tasks.length ? (
         <div className="flex flex-col gap-1.5">
@@ -261,119 +216,7 @@ export function FitnessCard({
         התוכנית השבועית
       </Link>
 
-      {sheet ? <ExerciseSheet b={sheet} done={isDone(sheet)} saved={saved} onToggle={() => toggle(sheet)} onClose={() => setSheet(null)} /> : null}
     </section>
-  );
-}
-
-function Dose({ b, large = false }: { b: WorkoutBlock; large?: boolean }) {
-  const big = large ? "text-5xl" : "text-[2rem]";
-  return (
-    <div className="flex items-end justify-center gap-2" dir="rtl">
-      <span className="flex flex-col items-center leading-none">
-        <span className={`num font-bold ${big}`}>{b.sets}</span>
-        <span className="mt-1 text-[11px] text-ink-muted">סטים</span>
-      </span>
-      <span className={`pb-4 text-ink-faint ${large ? "text-2xl" : "text-lg"}`} aria-hidden="true">
-        ×
-      </span>
-      <span className="flex flex-col items-center leading-none">
-        <span className={`num font-bold ${big}`}>{b.reps ?? b.seconds}</span>
-        <span className="mt-1 text-[11px] text-ink-muted">{b.reps !== undefined ? "חזרות" : "שניות"}</span>
-      </span>
-    </div>
-  );
-}
-
-function ExerciseTile({ b, done, saved, onOpen, onToggle }: { b: WorkoutBlock; done: boolean; saved: boolean; onOpen: () => void; onToggle: () => void }) {
-  return (
-    <li className={`flex flex-col overflow-hidden rounded-xl ring-1 transition-colors ${done ? "bg-accent-soft ring-accent" : "bg-field/60 ring-line"}`}>
-      <button type="button" onClick={onOpen} className="flex cursor-pointer flex-col gap-1 p-2 text-start" aria-label={`${b.name}: הדגמה והוראות`}>
-        <div className="relative rounded-lg bg-surface">
-          <ExerciseLoop slug={b.slug} highlight={b.primary} className="mx-auto h-24 w-full" />
-          <Info aria-hidden="true" className="absolute top-1.5 start-1.5 size-4 text-ink-faint" />
-        </div>
-        <span className="line-clamp-2 min-h-10 text-sm leading-tight font-semibold">{b.name}</span>
-        <Dose b={b} />
-        <span className="text-center text-[11px] text-ink-muted">
-          {b.perSide ? "לכל צד · " : ""}מנוחה <span className="num">{b.rest}</span> שנ׳
-        </span>
-      </button>
-      <button
-        type="button"
-        onClick={onToggle}
-        disabled={!saved}
-        aria-pressed={done}
-        className={`mt-auto flex min-h-10 cursor-pointer items-center justify-center gap-1.5 text-sm font-medium transition-colors disabled:cursor-default ${
-          done ? "bg-brand text-accent" : "bg-surface text-ink hover:bg-brand hover:text-white"
-        }`}
-      >
-        <Check aria-hidden="true" className="size-4" strokeWidth={3} />
-        {done ? "בוצע" : "סיימתי"}
-      </button>
-    </li>
-  );
-}
-
-function ExerciseSheet({ b, done, saved, onToggle, onClose }: { b: WorkoutBlock; done: boolean; saved: boolean; onToggle: () => void; onClose: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    // No close() on cleanup: it would fire onClose and unmount the sheet in a strict-mode re-run.
-    const d = ref.current;
-    if (d && !d.open) d.showModal();
-  }, []);
-  return (
-    <dialog
-      ref={ref}
-      onClose={onClose}
-      onClick={(e) => e.target === ref.current && onClose()}
-      aria-label={b.name}
-      className="m-auto mb-0 max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-surface p-0 text-ink backdrop:bg-ink/40 sm:mb-auto sm:rounded-2xl"
-    >
-      <div className="flex flex-col gap-4 p-4">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-lg font-semibold">{b.name}</h3>
-          <button type="button" onClick={onClose} aria-label="סגירה" className="flex size-9 cursor-pointer items-center justify-center rounded-lg hover:bg-field">
-            <X aria-hidden="true" className="size-5" />
-          </button>
-        </div>
-        <div className="rounded-xl bg-field py-3">
-          <Dose b={b} large />
-          <p className="mt-2 text-center text-xs text-ink-muted">
-            {b.perSide ? "לכל צד · " : ""}מנוחה של <span className="num">{b.rest}</span> שניות בין סטים
-          </p>
-        </div>
-        <ExerciseDemo slug={b.slug} name={b.name} highlight={b.primary} />
-        {b.primary.length ? <p className="text-sm text-ink-muted">שרירים: {b.primary.map((m) => muscleName.get(m) ?? m).join(", ")}</p> : null}
-        <ol className="flex flex-col gap-1.5 text-sm">
-          {b.steps.map((s, i) => (
-            <li key={i} className="flex gap-2">
-              <span className="num shrink-0 font-semibold text-ink-muted">{i + 1}.</span>
-              <span>{s}</span>
-            </li>
-          ))}
-        </ol>
-        {b.cautions ? (
-          <p className="flex gap-2 rounded-xl bg-warning-soft px-3 py-2 text-sm text-warning">
-            <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-            {b.cautions}
-          </p>
-        ) : null}
-        {b.easier ? <p className="rounded-xl bg-sky-soft px-3 py-2 text-sm">קשה מדי? אפשר להחליף ב{b.easier}.</p> : null}
-        <button
-          type="button"
-          disabled={!saved}
-          onClick={() => {
-            onToggle();
-            if (!done) onClose();
-          }}
-          className={`inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-xl font-medium transition-colors disabled:opacity-50 ${done ? "bg-brand-soft" : "bg-brand text-white hover:bg-brand-strong"}`}
-        >
-          <Check aria-hidden="true" className="size-4" />
-          {done ? "בטל סימון" : "סיימתי את התרגיל"}
-        </button>
-      </div>
-    </dialog>
   );
 }
 

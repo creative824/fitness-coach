@@ -4,8 +4,12 @@ import { ArrowLeft, Check, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState, useTransition } from "react";
 import { FoodEntry, kcalOf, useFoodEntry } from "@/components/food/food-entry";
+import type { SaveFood } from "@/components/food/recipe-calculator";
+import type { UnderstandMealResult } from "@/lib/food/estimate";
+import type { Understanding } from "@/lib/food/recipe";
 import { DayProvider, useDay } from "@/components/home/day-context";
-import { FitnessCard, type SmallTask, type WorkoutBlock } from "@/components/home/fitness-card";
+import { FitnessCard, type SmallTask } from "@/components/home/fitness-card";
+import { TodayWorkout } from "@/components/workout/today-workout";
 import { MenuCard, type MenuApi } from "@/components/home/menu-card";
 import { DayExtras } from "@/components/home/day-extras";
 import { DaySummary } from "@/components/home/day-summary";
@@ -22,6 +26,9 @@ import { toView } from "@/lib/menu/view";
 import type { MenuResult } from "@/lib/menu/actions";
 import type { GoalType } from "@/lib/onboarding/schema";
 import { PER_SIDE } from "@/lib/plan/duration";
+import { filterExercises } from "@/lib/plan/candidates";
+import { buildWorkout, type PoolExercise, type WorkoutItem } from "@/lib/workout/build";
+import type { ExerciseCard } from "@/lib/workout/today";
 import { calorieTarget } from "@/lib/plan/targets";
 import { bmiOf } from "@/lib/progress/bmi";
 import { screenSafety } from "@/lib/safety/screen";
@@ -40,6 +47,7 @@ interface Person {
   sleepHours: number;
   mealsPerDay: number;
   diet: DietProfile;
+  equipment: string[];
   workout: { title: string; minutes: number; slugs: [string, number, number][] } | null;
 }
 
@@ -51,6 +59,7 @@ const PEOPLE: Person[] = [
     about: "בן 36, 92 ק״ג, יושב רוב היום, מתחיל",
     age: 36, sex: "male", heightCm: 175, weightKg: 92, goals: ["lose_weight"], experience: "beginner", activityLevel: "sedentary", sleepHours: 6, mealsPerDay: 3,
     diet: { pattern: "omnivore", allergies: [], avoid: [] },
+    equipment: [],
     workout: null,
   },
   {
@@ -59,6 +68,7 @@ const PEOPLE: Person[] = [
     about: "בן 27, 74 ק״ג, פעיל, יום אימון",
     age: 27, sex: "male", heightCm: 180, weightKg: 74, goals: ["muscle"], experience: "intermediate", activityLevel: "moderate", sleepHours: 7.5, mealsPerDay: 5,
     diet: { pattern: "omnivore", allergies: [], avoid: [] },
+    equipment: ["dumbbells"],
     workout: { title: "גוף מלא", minutes: 35, slugs: [["goblet-squat", 4, 10], ["push-up", 3, 12], ["db-row", 3, 12], ["plank", 3, 40]] },
   },
   {
@@ -67,6 +77,7 @@ const PEOPLE: Person[] = [
     about: "בת 45, 66 ק״ג, צמחונית, רוצה גמישות",
     age: 45, sex: "female", heightCm: 164, weightKg: 66, goals: ["maintain_weight", "flexibility"], experience: "beginner", activityLevel: "light", sleepHours: 7, mealsPerDay: 6,
     diet: { pattern: "vegetarian", allergies: [], avoid: [] },
+    equipment: [],
     workout: { title: "כוח ויציבות", minutes: 25, slugs: [["bodyweight-squat", 3, 15], ["knee-push-up", 3, 10], ["glute-bridge", 3, 15], ["bird-dog", 2, 10]] },
   },
 ];
@@ -78,17 +89,32 @@ function setupFor(p: Person) {
   const cal = calorieTarget({ age: p.age, heightCm: p.heightCm, weightKg: p.weightKg, sex: p.sex, activityLevel: p.activityLevel, goals: p.goals, experience: p.experience, availableDays: [0, 2, 4], safety });
   const target = cal?.kcal ?? 2000;
   const menu = buildMenu({ target, mealsPerDay: p.mealsPerDay, profile: p.diet, seed: p.id.length * 977 + 13 });
-  const blocks: WorkoutBlock[] = (p.workout?.slugs ?? []).flatMap(([slug, sets, n], index) => {
+  // The sample person's exercise pool, filtered the same way as a real user's.
+  const rows = filterExercises(
+    EXERCISES.map((e) => ({ id: e.slug, slug: e.slug, name_he: e.name_he, category: e.category, mode: e.mode, difficulty: e.difficulty, equipment: e.equipment, primary_muscles: e.primary, contraindications: e.contraindications })),
+    { experience: p.experience, location: ["home"], equipment: p.equipment, limitations: "", safety },
+  );
+  const allowed = new Set(rows.map((r) => r.slug));
+  const pool: PoolExercise[] = rows.map((r) => {
+    const e = bySlug.get(r.slug)!;
+    return { slug: r.slug, name: r.name_he, category: r.category, mode: r.mode, difficulty: r.difficulty, primary: r.primary_muscles, easier: e.easier && allowed.has(e.easier) ? e.easier : null };
+  });
+  const cards: Record<string, ExerciseCard> = Object.fromEntries(
+    EXERCISES.map((e) => [e.slug, { name: e.name_he, primary: e.primary, steps: e.steps, cautions: e.cautions, perSide: PER_SIDE.has(e.slug) }]),
+  );
+  const planned: WorkoutItem[] = (p.workout?.slugs ?? []).flatMap(([slug, sets, n]) => {
     const e = bySlug.get(slug);
     if (!e) return [];
-    const secs = e.mode === "seconds";
-    return [{ index, slug, name: e.name_he, sets, reps: secs ? undefined : n, seconds: secs ? n : undefined, rest: 60, perSide: PER_SIDE.has(slug), primary: e.primary, steps: e.steps, cautions: e.cautions, easier: e.easier ? (bySlug.get(e.easier)?.name_he ?? null) : null }];
+    return [e.mode === "seconds" ? { slug, sets, seconds: n, rest: 60 } : { slug, sets, reps: n, rest: 60 }];
   });
+  const items = planned.length ? planned : buildWorkout(pool, 15, p.id, p.experience ?? "beginner");
+  const workout = { title: p.workout?.title ?? null, items, minutes: planned.length ? null : (15 as const) };
   const tasks: SmallTask[] = smartTasks({
     goals: p.goals, experience: p.experience, activityLevel: p.activityLevel, age: p.age, bmi: bmiOf(p.weightKg, p.heightCm), weightKg: p.weightKg, sleepHours: p.sleepHours,
-    lowIntensityOnly: false, needsDoctor: false, hideNumbers: false, workoutToday: blocks.length > 0, weeksIn: 0,
+    lowIntensityOnly: false, needsDoctor: false, hideNumbers: false, workoutToday: true, weeksIn: 0,
+    date: `2026-01-${10 + p.id.length}`, proteinTarget: proteinTarget(p.goals, p.weightKg, { heightCm: p.heightCm, activityLevel: p.activityLevel }),
   }).map((t) => ({ id: t.id, kind: t.kind, title: t.title, why: t.why, minutes: t.minutes, grams: t.grams, auto: false }));
-  return { target, menu, tasks, weight: sampleWeights(p), protein: proteinTarget(p.goals, p.weightKg), workout: p.workout && blocks.length ? { title: p.workout.title, minutes: p.workout.minutes, blocks } : null };
+  return { target, menu, tasks, weight: sampleWeights(p), protein: proteinTarget(p.goals, p.weightKg, { heightCm: p.heightCm, activityLevel: p.activityLevel }), workout, pool, cards };
 }
 
 export function DemoDay() {
@@ -230,12 +256,23 @@ function PersonDay({ person, avatar }: { person: Person; avatar: AvatarConfig })
   };
 
   return (
-    <DayProvider eatenKcal={0} workout={{ done: 0, total: setup.workout?.blocks.length ?? 0 }} activeMinutes={0}>
+    <DayProvider eatenKcal={0} workout={{ done: 0, total: setup.workout.items.length }} activeMinutes={0}>
       <DemoCompetition you={person.label} avatar={avatar} />
       <DaySummary target={setup.target} proteinTarget={setup.protein} minutes={12 * 60} trackHref={null} />
       <DayExtras water={null} weight={setup.weight} localWeight />
-      <MenuCard initial={toView(setup.menu, person.diet)} showNumbers saved aiEnabled={false} api={api} />
-      <FitnessCard workout={setup.workout} tasks={setup.tasks} initial={{ done: [], acts: [] }} weightKg={person.weightKg} saved demo />
+      <MenuCard initial={toView(setup.menu, person.diet)} showNumbers saved aiEnabled={false} api={api} recipes={{ understand: demoUnderstand, save: demoSave }} />
+      <TodayWorkout
+        initial={{ minutes: setup.workout.minutes, items: setup.workout.items }}
+        title={setup.workout.title}
+        pool={setup.pool}
+        cards={setup.cards}
+        done={[]}
+        seed={person.id}
+        level={person.experience ?? "beginner"}
+        saved
+        demo
+      />
+      <FitnessCard tasks={setup.tasks} initial={{ done: [], acts: [] }} weightKg={person.weightKg} saved demo />
       <DemoDiary
         onAdd={(k, p) => {
           extraRef.current = { kcal: extraRef.current.kcal + k, protein: extraRef.current.protein + p };
@@ -247,6 +284,29 @@ function PersonDay({ person, avatar }: { person: Person; avatar: AvatarConfig })
 }
 
 /** The food diary of the demo: type what you ate, see the calories, add it to the day. */
+/**
+ * The demo has no AI: one sample recipe stands in for what Gemini would understand from it.
+ * The numbers are still counted by the real engine (recipe.ts), and saving stays in the page.
+ */
+const DEMO_RECIPE = "הכנתי טראפלס מחפיסת שוקולד מריר, צנצנת שלמה של חמאת בוטנים טבעית ובערך כוס קורנפלקס. יצאו בערך 40 כדורים ואכלתי 6-7";
+const DEMO_TRUFFLES: Understanding = {
+  dish: "טראפלס",
+  kind: "recipe",
+  ingredients: [
+    { name: "שוקולד מריר", qty: 1, unit: "package", approx: false, per100: { kcal: 550, p: 7, c: 45, f: 38 } },
+    { name: "חמאת בוטנים טבעית", qty: 1, unit: "package", approx: false, per100: { kcal: 600, p: 25, c: 20, f: 50 } },
+    { name: "קורנפלקס", qty: 1, unit: "cup", approx: true, per100: { kcal: 380, p: 6, c: 85, f: 1 } },
+  ],
+  yieldUnits: { min: 40, max: 40 },
+  unitName: "כדורים",
+  eaten: { min: 6, max: 7 },
+};
+async function demoUnderstand(text: string): Promise<UnderstandMealResult> {
+  await new Promise((r) => setTimeout(r, 500));
+  return /טראפלס/.test(text) ? { ok: true, understanding: DEMO_TRUFFLES } : { ok: false, reason: "no_key" };
+}
+const demoSave: SaveFood = async (input) => ({ ok: true, food: { id: `demo-${input.name}`, name: input.name, kind: input.kind, unitName: input.unitName, yieldUnits: input.yieldUnits, perUnit: input.perUnit, accuracy: input.accuracy, recipe: input.recipe } });
+
 function DemoDiary({ onAdd, eaten }: { onAdd: (kcal: number, protein: number) => void; eaten: () => { kcal: number; protein: number } }) {
   const { setEatenKcal, setEatenProtein } = useDay();
   const entry = useFoodEntry();
@@ -271,7 +331,8 @@ function DemoDiary({ onAdd, eaten }: { onAdd: (kcal: number, protein: number) =>
       <h2 id="diary-title" className="text-lg font-semibold">
         יומן אוכל
       </h2>
-      <FoodEntry entry={entry} aiEnabled={false} showNumbers />
+      <p className="-mt-1 text-xs text-ink-muted">נסו מתכון: &quot;{DEMO_RECIPE}&quot;</p>
+      <FoodEntry entry={entry} aiEnabled={false} showNumbers understand={demoUnderstand} save={demoSave} />
       <button
         type="button"
         onClick={save}
