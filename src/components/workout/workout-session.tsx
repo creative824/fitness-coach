@@ -285,7 +285,8 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl bg-white/[0.07] p-3">
       <dt className="text-xs text-white/60">{label}</dt>
-      <dd className="num text-2xl font-bold">{value}</dd>
+      {/* Words in the value ("3 מתוך 4") read right to left; a bare number stays a numeral. */}
+      <dd className={`text-2xl font-bold ${/^[\d:]+$/.test(value) ? "num" : ""}`}>{value}</dd>
     </div>
   );
 }
