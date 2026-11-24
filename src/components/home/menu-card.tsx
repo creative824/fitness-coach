@@ -2,6 +2,7 @@
 
 import { Check, ChevronDown, Feather, List, Loader2, Minus, Pencil, Plus, RefreshCw, Shuffle, SlidersHorizontal, X } from "lucide-react";
 import Link from "next/link";
+import { mealEmoji } from "@/lib/menu/emoji";
 import { useRef, useState, useTransition } from "react";
 import { FoodEntry, useFoodEntry } from "@/components/food/food-entry";
 import type { SaveFood } from "@/components/food/recipe-calculator";
@@ -11,11 +12,12 @@ import { chooseMeal, logOtherFood, setMealEaten, setSlotKcal, swapMeal, swapWhol
 import type { MenuView, SlotView } from "@/lib/menu/view";
 import { fmt, useDay } from "./day-context";
 
-const SLOT_DOT: Record<SlotView["type"], string> = {
-  breakfast: "bg-accent",
-  snack: "bg-sand-soft ring-1 ring-ink/10",
-  lunch: "bg-coral",
-  dinner: "bg-sky",
+/** A soft pastel per meal of the day, so the day reads at a glance. */
+const SLOT_BG: Record<SlotView["type"], string> = {
+  breakfast: "bg-sand-soft",
+  snack: "bg-peach-soft",
+  lunch: "bg-coral-soft/70",
+  dinner: "bg-sky-soft",
 };
 
 /**
@@ -121,7 +123,7 @@ export function MenuCard({
         </p>
       ) : null}
 
-      <ul className="flex flex-col">
+      <ul className="flex flex-col gap-2 px-3 pb-1">
         {menu.slots.map((s) => (
           <MealRow
             key={s.index}
@@ -151,7 +153,7 @@ export function MenuCard({
         </p>
       ) : null}
 
-      <div className="border-t border-line px-4 py-3">
+      <div className="px-4 py-3">
         {other ? (
           <OtherFood
             slots={menu.slots.filter((s) => !s.eaten)}
@@ -219,60 +221,65 @@ function MealRow({
   const swapping = busy === `swap:${s.index}`;
   const title = s.instead ? s.instead.text : (s.meal?.title ?? "");
   return (
-    <li className="border-t border-line first:border-t-0">
-      <div className="flex items-center gap-2 px-3 py-2.5">
-        <button
-          type="button"
-          onClick={onEat}
-          disabled={!saved || busy !== null}
-          aria-pressed={s.eaten}
-          aria-label={s.eaten ? `ביטול: אכלתי ${s.label}` : `אכלתי ${s.label}`}
-          className={`flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 transition-[background-color,border-color,transform] active:scale-95 disabled:cursor-default ${
-            s.eaten ? "border-brand bg-brand text-accent" : "border-line text-transparent hover:border-ink/40 hover:text-ink/30"
-          }`}
-        >
-          <Check aria-hidden="true" className="size-4" strokeWidth={3} />
-        </button>
-        <button type="button" onClick={onToggle} aria-expanded={open} aria-controls={panel} className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-start">
-          <span className="flex min-w-0 flex-1 flex-col">
+    <li className={`rounded-2xl transition-colors ${s.eaten ? "bg-accent-soft" : SLOT_BG[s.type]}`}>
+      <div className="flex items-center gap-3 p-2.5">
+        <button type="button" onClick={onToggle} aria-expanded={open} aria-controls={panel} className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-start">
+          <span className="relative flex size-14 shrink-0 items-center justify-center rounded-2xl bg-surface text-[1.75rem] shadow-[var(--shadow-card)]" aria-hidden="true">
+            {mealEmoji(title, s.type)}
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="flex items-center gap-1.5 text-xs text-ink-muted">
-              <span className={`size-1.5 rounded-full ${SLOT_DOT[s.type]}`} aria-hidden="true" />
               {s.label}
-              {s.instead ? <span className="rounded-full bg-field px-1.5 text-[10px]">אכלתי משהו אחר</span> : null}
-              {s.light && !s.instead ? <span className="rounded-full bg-accent-soft px-1.5 text-[10px] text-ink">קליל</span> : null}
-              {s.custom && showNumbers ? <span className="rounded-full bg-sky-soft px-1.5 text-[10px] text-ink">כ-{s.planned} קל׳ לפי בחירתך</span> : null}
+              {s.instead ? <span className="rounded-full bg-surface/80 px-1.5 text-[10px]">אכלתי משהו אחר</span> : null}
+              {s.light && !s.instead ? <span className="rounded-full bg-surface/80 px-1.5 text-[10px] text-ink">קליל</span> : null}
+              {s.custom && showNumbers ? <span className="rounded-full bg-surface/80 px-1.5 text-[10px] text-ink">כ-{s.planned} קל׳ לפי בחירתך</span> : null}
             </span>
-            <span className={`truncate text-[15px] leading-snug font-medium ${s.eaten ? "text-ink-muted" : ""}`}>{title}</span>
-            {s.meal && !s.instead && !open ? (
-              <span className="truncate text-xs text-ink-muted">{s.meal.items.map((it) => `${it.amount} ${it.name}`).join(" · ")}</span>
+            <span className={`line-clamp-2 text-[15px] leading-snug font-semibold ${s.eaten ? "text-ink-muted" : ""}`}>{title}</span>
+            {showNumbers ? (
+              <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="rounded-full bg-surface/90 px-2 py-0.5 font-medium">
+                  <span className="num">{s.instead ? (s.instead.kcal ?? "–") : s.kcal}</span> קל׳
+                </span>
+                {s.meal && !s.instead ? (
+                  <span className="rounded-full bg-surface/90 px-2 py-0.5 text-ink-muted">
+                    <span className="num">{s.meal.protein}</span> ג׳ חלבון
+                  </span>
+                ) : null}
+              </span>
             ) : null}
           </span>
-          {showNumbers ? (
-            <span className="flex shrink-0 flex-col items-end leading-none">
-              <span className="num text-base font-semibold">{s.instead ? (s.instead.kcal ?? "–") : s.kcal}</span>
-              <span className="text-[10px] text-ink-muted">קל׳</span>
-            </span>
-          ) : null}
-          <ChevronDown aria-hidden="true" className={`size-4 shrink-0 text-ink-muted transition-transform ${open ? "rotate-180" : ""}`} />
+          <ChevronDown aria-hidden="true" className={`size-4 shrink-0 text-ink-faint transition-transform ${open ? "rotate-180" : ""}`} />
         </button>
-        {saved && !s.eaten ? (
+        <div className="flex shrink-0 flex-col items-center gap-1">
           <button
             type="button"
-            onClick={onSwap}
-            disabled={busy !== null}
-            aria-label={`החלפת ${s.label} באפשרות אחרת`}
-            title="החלפה באפשרות אחרת באותן קלוריות"
-            className="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-ink-muted transition-colors hover:bg-field hover:text-ink disabled:opacity-50"
+            onClick={onEat}
+            disabled={!saved || busy !== null}
+            aria-pressed={s.eaten}
+            aria-label={s.eaten ? `ביטול: אכלתי ${s.label}` : `אכלתי ${s.label}`}
+            className={`flex size-10 cursor-pointer items-center justify-center rounded-full transition-[background-color,transform] active:scale-90 disabled:cursor-default ${
+              s.eaten ? "bg-brand text-accent" : "bg-surface text-ink-faint shadow-[var(--shadow-card)] hover:text-brand"
+            }`}
           >
-            <Shuffle aria-hidden="true" className={`size-4 ${swapping ? "animate-pulse" : ""}`} />
+            <Check aria-hidden="true" className="size-5" strokeWidth={3} />
           </button>
-        ) : (
-          <span className="size-9 shrink-0" aria-hidden="true" />
-        )}
+          {saved && !s.eaten ? (
+            <button
+              type="button"
+              onClick={onSwap}
+              disabled={busy !== null}
+              aria-label={`החלפת ${s.label} באפשרות אחרת`}
+              title="החלפה באפשרות אחרת באותן קלוריות"
+              className="flex size-8 cursor-pointer items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface hover:text-ink disabled:opacity-50"
+            >
+              <Shuffle aria-hidden="true" className={`size-4 ${swapping ? "animate-pulse" : ""}`} />
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {open && s.meal && !s.instead ? (
-        <div id={panel} className="mx-3 mb-3 flex flex-col gap-2 rounded-xl bg-field p-3">
+        <div id={panel} className="mx-2.5 mb-2.5 flex flex-col gap-2 rounded-xl bg-surface/90 p-3">
           <ul className="flex flex-col gap-1.5 text-sm">
             {s.meal.items.map((it) => (
               <li key={it.food} className="flex items-baseline justify-between gap-3">
