@@ -6,7 +6,7 @@ import { classifyGeminiError, estimateMeal } from "./estimate";
 
 const reply = (obj: unknown) =>
   new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(obj) }] } }] }), { status: 200 });
-const good = { not_food: false, items: [{ item_name: "חביתה", kcal_min: 150, kcal_max: 200, protein_g: 12, carbs_g: 1, fat_g: 11, confidence: "medium" }] };
+const good = { not_food: false, dish: "חביתה", kind: "single", ingredients: [{ name: "חביתה", qty: 2, unit: "pc", approx: false, kcal_100: 190, protein_100: 13, carbs_100: 1, fat_100: 15 }] };
 
 afterEach(() => {
   vi.unstubAllGlobals();

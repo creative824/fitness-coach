@@ -6,15 +6,16 @@ import { useRef, useState, useTransition } from "react";
 import { Card } from "@/components/ui/card";
 import { saveFoodLog } from "@/lib/food/actions";
 import { MEAL_LABEL, MEAL_TYPES, type MealType } from "@/lib/food/items";
+import type { SavedFood } from "@/lib/food/saved";
 import { FoodEntry, useFoodEntry } from "./food-entry";
 
 /**
  * "What did you eat": free text, counted live from the food database as you type (amounts can
  * be nudged with − / +), saved to the day in one tap.
  */
-export function FoodLogger({ aiEnabled, tracking, defaultMeal }: { aiEnabled: boolean; tracking: boolean; defaultMeal: MealType }) {
+export function FoodLogger({ aiEnabled, tracking, defaultMeal, savedFoods = [] }: { aiEnabled: boolean; tracking: boolean; defaultMeal: MealType; savedFoods?: SavedFood[] }) {
   const router = useRouter();
-  const entry = useFoodEntry();
+  const entry = useFoodEntry(savedFoods);
   const [meal, setMeal] = useState<MealType>(defaultMeal);
   const [note, setNote] = useState<string | null>(null);
   // Made on the first save attempt and kept for retries, so a repeated tap is not stored twice.

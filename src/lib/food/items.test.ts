@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import { foodItemSchema, mealTypeAt, saveFoodSchema, totalsOf } from "./items";
-import { parseEstimate } from "./estimate";
+import { parseUnderstanding } from "./recipe";
 
 const item = (o: Record<string, unknown>) => foodItemSchema.parse({ item_name: "חביתה", ...o });
 
@@ -39,25 +39,36 @@ describe("food items", () => {
   });
 });
 
-describe("parsing the AI estimate", () => {
-  it("keeps valid items and the clarifying question", () => {
-    const r = parseEstimate(
+describe("reading what the AI understood", () => {
+  it("keeps valid ingredients and drops broken ones; no totals are taken from the AI", () => {
+    const r = parseUnderstanding(
       JSON.stringify({
         not_food: false,
-        question: "  החביתה טוגנה בשמן? ",
-        items: [
-          { item_name: "חביתה", quantity: 1, unit: "ביצה", kcal_min: 90, kcal_max: 140, protein_g: 6, carbs_g: 1, fat_g: 7, confidence: "medium" },
-          { item_name: "", kcal_min: 1, kcal_max: 2 },
+        dish: "טראפלס",
+        kind: "recipe",
+        ingredients: [
+          { name: "שוקולד מריר", qty: 1, unit: "package", approx: false, kcal_100: 550, protein_100: 7, carbs_100: 45, fat_100: 38 },
+          { name: "", qty: 1, unit: "cup", approx: false, kcal_100: 1, protein_100: 1, carbs_100: 1, fat_100: 1 },
+          { name: "קורנפלקס", qty: 1, unit: "bucket", approx: true, kcal_100: 380, protein_100: 6, carbs_100: 88, fat_100: 1 },
         ],
+        yield_min: 40,
+        yield_max: 40,
+        unit_name: "כדורים",
+        eaten_min: 7,
+        eaten_max: 6,
       }),
     );
-    expect(r).toMatchObject({ ok: true, question: "החביתה טוגנה בשמן?" });
-    if (r.ok) expect(r.items).toHaveLength(1);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.understanding.ingredients).toHaveLength(2);
+    expect(r.understanding.ingredients[1]).toMatchObject({ name: "קורנפלקס", unit: null, approx: true });
+    expect(r.understanding.eaten).toEqual({ min: 6, max: 7 });
+    expect(r.understanding.yieldUnits).toEqual({ min: 40, max: 40 });
   });
 
   it("says when the text is not food, and fails safely on bad output", () => {
-    expect(parseEstimate(JSON.stringify({ not_food: true, items: [] }))).toEqual({ ok: false, reason: "not_food" });
-    expect(parseEstimate("not json")).toEqual({ ok: false, reason: "failed" });
-    expect(parseEstimate(JSON.stringify({ items: [] }))).toEqual({ ok: false, reason: "failed" });
+    expect(parseUnderstanding(JSON.stringify({ not_food: true, ingredients: [] }))).toEqual({ ok: false, reason: "not_food" });
+    expect(parseUnderstanding("not json")).toEqual({ ok: false, reason: "failed" });
+    expect(parseUnderstanding(JSON.stringify({ kind: "single", ingredients: [] }))).toEqual({ ok: false, reason: "failed" });
   });
 });

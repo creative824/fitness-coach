@@ -1,6 +1,7 @@
 import "server-only";
 import { loadDayContext, type DayContext } from "@/lib/day/context";
 import { createClient } from "@/lib/supabase/server";
+import { sessionsOf, storedWorkoutOf, type StoredSession, type StoredWorkout } from "@/lib/workout/today";
 import { buildMenu, seedFrom, upgradeMenu, type DayMenu } from "./engine";
 
 export interface FitnessState {
@@ -8,6 +9,12 @@ export interface FitnessState {
   done: string[];
   /** General activities the user added. */
   acts: { id: string; kind: string; min: number }[];
+  /** Today's workout as the user set it on the home screen (length, swaps, edits); none = the plan's. */
+  workout?: StoredWorkout;
+  /** Guided sessions finished today ("סיימתי אימון"), newest last. */
+  sessions?: StoredSession[];
+  /** Ids of the small tasks given today, so the list holds all day and tomorrow avoids them. */
+  tasks?: string[];
 }
 
 export interface DayLog {
@@ -29,7 +36,15 @@ export function fitnessOf(v: unknown): FitnessState {
   return {
     done: Array.isArray(f.done) ? f.done.filter((x) => typeof x === "string").slice(0, 40) : [],
     acts: Array.isArray(f.acts) ? f.acts.filter((a) => a && typeof a.kind === "string" && typeof a.min === "number").slice(0, 20) : [],
+    ...withWorkout(f),
   };
+}
+
+function withWorkout(f: Partial<FitnessState>): Pick<FitnessState, "workout" | "sessions"> {
+  const workout = storedWorkoutOf(f.workout);
+  const sessions = sessionsOf(f.sessions);
+  const tasks = Array.isArray(f.tasks) ? f.tasks.filter((t): t is string => typeof t === "string" && /^[a-z_]{2,20}$/.test(t)).slice(0, 6) : [];
+  return { ...(workout ? { workout } : {}), ...(sessions.length ? { sessions } : {}), ...(tasks.length ? { tasks } : {}) };
 }
 
 export function freshMenu(ctx: DayContext, userId: string, date: string, seed = seedFrom(`${userId}:${date}`)): DayMenu {
@@ -63,6 +78,20 @@ export async function loadDayLog(userId: string, date: string): Promise<DayLog> 
     menu: again && isMenu(again.menu) ? again.menu : menu,
     fitness: fitnessOf(again?.fitness ?? data?.fitness),
   };
+}
+
+/**
+ * Keeps the small tasks given today with the day, the first time the day is opened. Later
+ * views show the same tasks, and the next days know what was given. Best effort.
+ */
+export async function rememberTasks(userId: string, date: string, ids: string[]): Promise<void> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("day_logs").select("fitness").eq("user_id", userId).eq("date", date).maybeSingle();
+  if (!data) return;
+  const f = fitnessOf(data.fitness);
+  if (f.tasks?.length) return;
+  const { error } = await supabase.from("day_logs").update({ fitness: { ...f, tasks: ids } }).eq("user_id", userId).eq("date", date);
+  if (error) console.error("remember tasks failed", error.message);
 }
 
 /** Days of a range with their menus' targets and activities, for the tracking screens. */
