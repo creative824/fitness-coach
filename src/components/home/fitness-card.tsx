@@ -41,6 +41,7 @@ export interface SmallTask {
 }
 
 const MOVEMENT_KINDS: SmartTaskKind[] = ["walk", "brisk_walk", "jog", "stretch", "steps_break"];
+const MOVE_KINDS = new Set<SmartTaskKind>(MOVEMENT_KINDS);
 const planType = (k: SmartTaskKind) => (MOVEMENT_KINDS.includes(k) ? "movement" : k === "sleep" ? "recovery" : "habit");
 const TASK_ICON: Record<SmartTaskKind, typeof Footprints> = {
   walk: Footprints,
@@ -77,7 +78,7 @@ export function FitnessCard({
   /** Keep changes in the page only (the demo without an account). */
   demo?: boolean;
 }) {
-  const { setWorkout, setActiveMinutes, setActions, eatenProtein } = useDay();
+  const { setWorkout, setActiveMinutes, setActions, setTasks, eatenProtein } = useDay();
   const [fit, setFit] = useState(initial);
   const [sheet, setSheet] = useState<WorkoutBlock | null>(null);
   const [adding, setAdding] = useState(false);
@@ -118,6 +119,12 @@ export function FitnessCard({
     t.auto || fit.done.includes(`t:${t.id}`) || (t.minutes ? progressOf(t) >= t.minutes : false) || (t.kind === "protein" && Boolean(t.grams) && eatenProtein >= (t.grams ?? 0));
   const tasksDone = tasks.filter(isTaskDone).length;
   useEffect(() => setActions({ done: doneCount + tasksDone, total: total + tasks.length }), [doneCount, tasksDone, total, tasks.length, setActions]);
+  const moves = tasks.filter((t) => MOVE_KINDS.has(t.kind));
+  const movesDone = moves.filter(isTaskDone).length;
+  useEffect(
+    () => setTasks({ moves: { done: movesDone, total: moves.length }, other: { done: tasksDone - movesDone, total: tasks.length - moves.length } }),
+    [movesDone, moves.length, tasksDone, tasks.length, setTasks],
+  );
 
   function toggleTask(t: SmallTask) {
     const key = `t:${t.id}`;
@@ -164,7 +171,7 @@ export function FitnessCard({
 
       {tasks.length ? (
         <div className="flex flex-col gap-1.5">
-          <h3 className="text-sm font-semibold">המשימות שלך להיום</h3>
+          <h3 id="tasks" className="scroll-mt-6 text-sm font-semibold">המשימות שלך להיום</h3>
           <ul className="flex flex-col gap-2">
             {tasks.map((t) => {
               const Icon = TASK_ICON[t.kind];

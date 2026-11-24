@@ -1,10 +1,12 @@
 import { ChevronLeft, KeyRound, Plus, Trophy } from "lucide-react";
 import Link from "next/link";
+import { FaceAvatar } from "@/components/ui/face-avatar";
+import type { AvatarConfig } from "@/lib/avatar";
 import type { CompetitionCard } from "@/lib/competitions/data";
 import { KIND_INFO, scoreLabel, timeLeftLabel } from "@/lib/competitions/rules";
 
 /** Competitions the user is in, first thing on the today screen: place, score and time left. */
-export function CompetitionsStrip({ items, today }: { items: CompetitionCard[]; today: string }) {
+export function CompetitionsStrip({ items, today, me }: { items: CompetitionCard[]; today: string; me: { seed: string; avatar: AvatarConfig | null } }) {
   if (!items.length) {
     return (
       <section aria-label="תחרויות" className="flex items-center gap-3 rounded-[var(--radius-card)] bg-surface p-3 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
@@ -38,48 +40,50 @@ export function CompetitionsStrip({ items, today }: { items: CompetitionCard[]; 
         </Link>
       </div>
       <ul className="-mx-4 flex snap-x gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
-        {items.map((c, i) => {
+        {items.map((c) => {
           const left = timeLeftLabel(c, c.status, today);
           const lead = c.rank === 1 && c.status === "active";
           return (
-            <li key={c.id} className={`shrink-0 snap-start ${items.length === 1 ? "w-full" : "w-[78%] sm:w-64"}`}>
+            <li key={c.id} className={`shrink-0 snap-start ${items.length === 1 ? "w-full" : "w-[72%] sm:w-60"}`}>
               <Link
                 href={`/competitions/${c.id}`}
-                className={`flex h-full items-center gap-3 rounded-[var(--radius-card)] p-3 transition-shadow hover:shadow-[var(--shadow-float)] ${
-                  i === 0 ? "bg-accent text-ink" : "bg-surface shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]"
-                }`}
+                className="flex h-full flex-col gap-2 rounded-[var(--radius-card)] bg-surface p-3 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04] transition-shadow hover:shadow-[var(--shadow-float)]"
               >
-                <span className={`flex size-12 shrink-0 flex-col items-center justify-center rounded-xl leading-none ${i === 0 ? "bg-night text-accent" : "bg-field"}`}>
-                  {c.rank ? (
-                    <>
-                      <span className="num text-xl font-bold">{c.rank}</span>
-                      <span className="text-[10px] opacity-70">מקום</span>
-                    </>
-                  ) : (
-                    <Trophy aria-hidden="true" className="size-5" />
-                  )}
+                <span className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm font-semibold">{c.name}</span>
+                  <span className="shrink-0 text-[11px] text-ink-muted">{left}</span>
                 </span>
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate font-semibold">
-                    {c.name} {lead ? "👑" : ""}
-                  </span>
-                  <span className="truncate text-xs opacity-75">
-                    {KIND_INFO[c.kind].title}
-                    {c.members ? (
-                      <>
-                        {" · "}
-                        <span className="num">{c.members}</span> משתתפים
-                      </>
+                <span className="flex items-center gap-2.5">
+                  <span className="relative shrink-0">
+                    <FaceAvatar seed={me.seed} config={me.avatar} size={40} />
+                    {lead ? (
+                      <span aria-hidden="true" className="absolute -top-2 -end-1 text-sm">
+                        👑
+                      </span>
                     ) : null}
                   </span>
-                  <span className="text-xs opacity-75">
-                    {c.score !== null ? (
-                      <>
-                        <span className="num font-semibold">{scoreLabel(c.kind, c.score)}</span>
-                        {" · "}
-                      </>
-                    ) : null}
-                    {left}
+                  <span className="flex min-w-0 flex-col leading-tight">
+                    <span className="text-sm">
+                      {c.rank ? (
+                        <>
+                          מקום <span className="num text-base font-bold">{c.rank}</span>
+                          {c.members ? (
+                            <span className="text-ink-muted">
+                              {" "}
+                              מתוך <span className="num">{c.members}</span>
+                            </span>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span className="text-ink-muted">
+                          <span className="num">{c.members}</span> משתתפים
+                        </span>
+                      )}
+                    </span>
+                    <span className="truncate text-xs text-ink-muted">
+                      {c.score !== null ? <span className="num font-semibold text-accent-strong">{scoreLabel(c.kind, c.score)}</span> : KIND_INFO[c.kind].title}
+                      {c.score !== null ? ` · ${KIND_INFO[c.kind].title}` : ""}
+                    </span>
                   </span>
                 </span>
               </Link>

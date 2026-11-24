@@ -7,9 +7,10 @@ import { FoodEntry, kcalOf, useFoodEntry } from "@/components/food/food-entry";
 import { DayProvider, useDay } from "@/components/home/day-context";
 import { FitnessCard, type SmallTask, type WorkoutBlock } from "@/components/home/fitness-card";
 import { MenuCard, type MenuApi } from "@/components/home/menu-card";
-import { StatusCard, type WeekDayStat } from "@/components/home/status-card";
+import { DayExtras } from "@/components/home/day-extras";
+import { DaySummary } from "@/components/home/day-summary";
 import { AvatarEditor } from "@/components/ui/avatar-editor";
-import { FaceAvatar, FaceWithName } from "@/components/ui/face-avatar";
+import { FaceAvatar } from "@/components/ui/face-avatar";
 import { avatarFromSeed, type AvatarConfig } from "@/lib/avatar";
 import { EXERCISES } from "@/content/exercises";
 import { proteinTarget } from "@/lib/day/scores";
@@ -87,7 +88,7 @@ function setupFor(p: Person) {
     goals: p.goals, experience: p.experience, activityLevel: p.activityLevel, age: p.age, bmi: bmiOf(p.weightKg, p.heightCm), weightKg: p.weightKg, sleepHours: p.sleepHours,
     lowIntensityOnly: false, needsDoctor: false, hideNumbers: false, workoutToday: blocks.length > 0, weeksIn: 0,
   }).map((t) => ({ id: t.id, kind: t.kind, title: t.title, why: t.why, minutes: t.minutes, grams: t.grams, auto: false }));
-  return { target, menu, tasks, week: sampleWeek(p.id, target), weight: sampleWeights(p), protein: proteinTarget(p.goals, p.weightKg), workout: p.workout && blocks.length ? { title: p.workout.title, minutes: p.workout.minutes, blocks } : null };
+  return { target, menu, tasks, weight: sampleWeights(p), protein: proteinTarget(p.goals, p.weightKg), workout: p.workout && blocks.length ? { title: p.workout.title, minutes: p.workout.minutes, blocks } : null };
 }
 
 export function DemoDay() {
@@ -167,36 +168,6 @@ export function DemoDay() {
   );
 }
 
-const LETTERS = ["א׳", "ב׳", "ג׳", "ד׳", "ה׳", "ו׳", "ש׳"];
-
-/** A made-up week up to today, so the weekly view and scores have something to show. */
-function sampleWeek(seed: string, target: number): WeekDayStat[] {
-  // A fixed sample: today is Thursday, Sunday to Wednesday are behind us.
-  const todayIdx = 4;
-  let h = seed.length * 7919 + 17;
-  const rnd = () => {
-    h = (h * 16807) % 2147483647;
-    return h / 2147483647;
-  };
-  return LETTERS.map((letter, i) => {
-    const past = i < todayIdx;
-    const kcal = past ? Math.round(target * (0.85 + rnd() * 0.3)) : null;
-    const off = kcal ? Math.abs(kcal / target - 1) : 0;
-    const cal = kcal ? Math.max(0, Math.min(100, off <= 0.1 ? 100 : Math.round(100 - ((off - 0.1) / 0.3) * 100))) : null;
-    const date = `sample-${i}`;
-    return {
-      date,
-      letter,
-      kcal,
-      workout: i % 2 === 1 ? (past ? (rnd() > 0.3 ? "done" : "partial") : "planned") : "none",
-      isToday: i === todayIdx,
-      future: i > todayIdx,
-      calorieScore: cal,
-      taskScore: past ? Math.round(55 + rnd() * 40) : null,
-    };
-  });
-}
-
 /** Sample weigh-ins: weekly, the last one 4 days ago, so the reminder shows. */
 function sampleWeights(p: Person) {
   const drift = p.goals.includes("lose_weight") ? -0.45 : p.goals.includes("muscle") ? 0.2 : 0.05;
@@ -261,7 +232,8 @@ function PersonDay({ person, avatar }: { person: Person; avatar: AvatarConfig })
   return (
     <DayProvider eatenKcal={0} workout={{ done: 0, total: setup.workout?.blocks.length ?? 0 }} activeMinutes={0}>
       <DemoCompetition you={person.label} avatar={avatar} />
-      <StatusCard target={setup.target} showNumbers week={setup.week} water={null} weight={setup.weight} localWeight proteinTarget={setup.protein} />
+      <DaySummary target={setup.target} proteinTarget={setup.protein} minutes={12 * 60} trackHref={null} />
+      <DayExtras water={null} weight={setup.weight} localWeight />
       <MenuCard initial={toView(setup.menu, person.diet)} showNumbers saved aiEnabled={false} api={api} />
       <FitnessCard workout={setup.workout} tasks={setup.tasks} initial={{ done: [], acts: [] }} weightKg={person.weightKg} saved demo />
       <DemoDiary
@@ -342,44 +314,103 @@ function DemoDiary({ onAdd, eaten }: { onAdd: (kcal: number, protein: number) =>
 
 const RIVALS = ["דנה", "יוסי", "מיכל", "אבי", "נועה"];
 
-/** A sample competition: faces with names, so the table reads like people, not a list of words. */
+/** Two sample competitions as compact cards; a tap opens the table of that competition. */
 function DemoCompetition({ you, avatar }: { you: string; avatar: AvatarConfig }) {
-  const people = [
-    { key: "demo-dana", name: RIVALS[0], score: 3.8 },
-    { key: "demo-you", name: "את/ה", score: 3.1, me: true },
-    { key: "demo-yossi", name: RIVALS[1], score: 2.6 },
-    { key: "demo-michal", name: RIVALS[2], score: 2.2 },
-    { key: "demo-avi", name: RIVALS[3], score: 1.4 },
-    { key: "demo-noa", name: RIVALS[4], score: 0.9 },
+  const comps = [
+    {
+      id: "nov",
+      name: "תחרות נובמבר",
+      left: "נשארו 6 ימים",
+      people: [
+        { key: "demo-dana", name: RIVALS[0], score: 3.8 },
+        { key: "demo-you", name: "את/ה", score: 3.1, me: true },
+        { key: "demo-yossi", name: RIVALS[1], score: 2.6 },
+        { key: "demo-michal", name: RIVALS[2], score: 2.2 },
+        { key: "demo-avi", name: RIVALS[3], score: 1.4 },
+        { key: "demo-noa", name: RIVALS[4], score: 0.9 },
+      ],
+    },
+    {
+      id: "office",
+      name: "המשרד",
+      left: "נשארו 12 ימים",
+      people: [
+        { key: "demo-you", name: "את/ה", score: 2.4, me: true },
+        { key: "demo-avi", name: RIVALS[3], score: 1.9 },
+        { key: "demo-michal", name: RIVALS[2], score: 1.1 },
+        { key: "demo-noa", name: RIVALS[4], score: 0.4 },
+      ],
+    },
   ];
-  const [first, second, third] = people;
+  const [open, setOpen] = useState<string | null>(null);
+  const shown = comps.find((c) => c.id === open) ?? null;
   return (
-    <section aria-labelledby="demo-comp" className="flex flex-col gap-3 rounded-[var(--radius-card)] bg-surface p-4 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 id="demo-comp" className="font-semibold">
-          תחרות דיאטה לדוגמה
-        </h2>
-        <span className="text-xs text-ink-muted">{you} · מקום 2</span>
-      </div>
-      <div className="flex items-end justify-center gap-3 rounded-xl bg-field px-3 pt-4 pb-3">
-        {[second, first, third].map((p) => (
-          <div key={p.key} className={`flex flex-col items-center ${p === first ? "-translate-y-2" : ""}`}>
-            {p === first ? <span aria-hidden="true">👑</span> : null}
-            <FaceWithName seed={p.key + you} config={p.me ? avatar : null} name={p.name} size={p === first ? 68 : 54} note={`${p.score.toFixed(1)}%`} highlight={Boolean(p.me)} />
-          </div>
-        ))}
-      </div>
-      <p className="text-xs text-ink-muted">המנצח: מי שהוריד הכי הרבה אחוזים מהמשקל שלו. נספר קצב בריא בלבד, עד 1% בשבוע. אחרים רואים רק אחוזים, לא קילוגרמים.</p>
+    <section aria-labelledby="demo-comp" className="flex flex-col gap-2">
+      <h2 id="demo-comp" className="text-sm font-semibold">
+        התחרויות שלי <span className="font-normal text-ink-muted">(לדוגמה)</span>
+      </h2>
+      <ul className="-mx-4 flex snap-x gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+        {comps.map((c) => {
+          const rank = c.people.findIndex((p) => p.me) + 1;
+          const mine = c.people[rank - 1];
+          return (
+            <li key={c.id} className="w-[72%] shrink-0 snap-start sm:w-60">
+              <button
+                type="button"
+                aria-expanded={open === c.id}
+                onClick={() => setOpen(open === c.id ? null : c.id)}
+                className={`flex h-full w-full cursor-pointer flex-col gap-2 rounded-[var(--radius-card)] bg-surface p-3 text-start shadow-[var(--shadow-card)] ring-1 transition-shadow hover:shadow-[var(--shadow-float)] ${open === c.id ? "ring-ink/40" : "ring-ink/[0.04]"}`}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm font-semibold">{c.name}</span>
+                  <span className="shrink-0 text-[11px] text-ink-muted">{c.left}</span>
+                </span>
+                <span className="flex items-center gap-2.5">
+                  <span className="relative shrink-0">
+                    <FaceAvatar seed={"demo-you" + you} config={avatar} size={40} />
+                    {rank === 1 ? (
+                      <span aria-hidden="true" className="absolute -top-2 -end-1 text-sm">
+                        👑
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="flex flex-col leading-tight">
+                    <span className="text-sm">
+                      מקום <span className="num text-base font-bold">{rank}</span>
+                      <span className="text-ink-muted">
+                        {" "}
+                        מתוך <span className="num">{c.people.length}</span>
+                      </span>
+                    </span>
+                    <span className="text-xs text-ink-muted">
+                      ירידה של <span className="num font-semibold text-accent-strong">{mine.score.toFixed(1)}%</span>
+                    </span>
+                  </span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {shown ? <DemoTable people={shown.people} you={you} avatar={avatar} /> : null}
+    </section>
+  );
+}
+
+function DemoTable({ people, you, avatar }: { people: { key: string; name: string; score: number; me?: boolean }[]; you: string; avatar: AvatarConfig }) {
+  return (
+    <div className="flex flex-col gap-1.5 rounded-[var(--radius-card)] bg-surface p-3 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
       <ol className="flex flex-col gap-1.5">
-        {people.slice(3).map((p, i) => (
-          <li key={p.key} className="flex items-center gap-3 rounded-xl bg-field px-3 py-2">
-            <span className="num w-5 text-center text-sm font-semibold">{i + 4}</span>
-            <FaceAvatar seed={p.key + you} size={32} />
+        {people.map((p, i) => (
+          <li key={p.key} className={`flex items-center gap-3 rounded-xl px-3 py-2 ${p.me ? "bg-accent-soft ring-1 ring-accent" : "bg-field"}`}>
+            <span className="num w-5 text-center text-sm font-semibold">{i === 0 ? "👑" : i + 1}</span>
+            <FaceAvatar seed={p.key + you} config={p.me ? avatar : null} size={32} />
             <span className="flex-1 text-sm font-medium">{p.name}</span>
             <span className="num text-sm font-semibold">{p.score.toFixed(1)}%</span>
           </li>
         ))}
       </ol>
-    </section>
+      <p className="text-xs text-ink-muted">כאן רואים רק אחוזים, אף פעם לא קילוגרמים.</p>
+    </div>
   );
 }
