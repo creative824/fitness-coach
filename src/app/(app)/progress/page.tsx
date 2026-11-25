@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { Beef, ChevronLeft, ChevronRight, Dumbbell, Flame } from "lucide-react";
+import { ChevronLeft, ChevronRight, Dumbbell } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { DayBars } from "@/components/progress/day-bars";
-import { FoodDiary } from "@/components/progress/food-diary";
+import { FoodDay, type FoodDayProps } from "@/components/diary/food-day";
 import { WeightCard } from "@/components/progress/weight-card";
 import { Card } from "@/components/ui/card";
 import { LoadingState } from "@/components/ui/states";
@@ -12,6 +12,8 @@ import { loadScores, type SavedScore } from "@/lib/day/score-data";
 import { DAILY_WEIGHTS, type DailyPart } from "@/lib/day/scores";
 import { requireUser } from "@/lib/data/user";
 import { loadFoodDay, loadFoodRange } from "@/lib/food/data";
+import { mealTypeAt } from "@/lib/food/items";
+import { loadRecentMeals, type RecentMeal } from "@/lib/food/recent";
 import { ACTIVITIES, type ActivityKind } from "@/lib/fitness/activities";
 import { getDictionary } from "@/lib/i18n/he";
 import { loadDayLogRange } from "@/lib/menu/data";
@@ -64,14 +66,14 @@ function rangeOf(r: Range, today: string, back: number, day: string): [string, s
  */
 async function Progress({ searchParams }: { searchParams: PageProps<"/progress">["searchParams"] }) {
   const user = await requireUser();
-  const today = localDay(new Date()).date;
+  const { date: today, minutes } = localDay(new Date());
   const sp = await searchParams;
   const range: Range = sp.r === "week" || sp.r === "month" ? sp.r : "day";
   const back = range === "day" ? 0 : Math.min(24, Math.max(0, Number(sp.b) || 0));
   const askedDay = typeof sp.d === "string" && DATE.test(sp.d) && sp.d <= today ? sp.d : today;
   const [from, to] = rangeOf(range, today, back, askedDay);
 
-  const [ctx, p, food, logs, workouts, foodDay, scores] = await Promise.all([
+  const [ctx, p, food, logs, workouts, foodDay, scores, recent] = await Promise.all([
     loadDayContext(user.id),
     loadProgress(user.id, today),
     loadFoodRange(user.id, from, to).catch(() => ({ tracking: true, days: {} as Awaited<ReturnType<typeof loadFoodRange>>["days"] })),
@@ -79,6 +81,7 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
     loadWorkoutDays(user.id, from, to),
     range === "day" ? loadFoodDay(user.id, askedDay).catch(() => null) : Promise.resolve(null),
     loadScores(user.id, from, to).catch(() => new Map<string, SavedScore>()),
+    range === "day" && askedDay === today ? loadRecentMeals(user.id, today).catch((): RecentMeal[] => []) : Promise.resolve([] as RecentMeal[]),
   ]);
   const target = ctx.showNumbers ? ctx.target : null;
   const protein = ctx.protein;
@@ -108,13 +111,18 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
           today={today}
           target={target}
           protein={protein}
-          eaten={mid(foodDay?.totals.kcal) ?? 0}
-          proteinEaten={foodDay?.totals.protein ?? 0}
           workout={workouts[askedDay] ?? null}
           acts={logs.get(askedDay)?.fitness.acts ?? []}
           foodDay={foodDay}
           tracking={ctx.showNumbers}
           score={askedDay < today ? (scores.get(askedDay) ?? null) : null}
+          diary={{
+            defaultMeal: mealTypeAt(minutes),
+            recent,
+            ideaContext: { target, proteinTarget: protein, profile: ctx.profile, taste: ctx.taste, minutes },
+            savedIdeas: ctx.savedIdeas,
+            photoEnabled: Boolean(process.env.GEMINI_API_KEY),
+          }}
         />
       ) : (
         <PeriodView
@@ -166,61 +174,24 @@ function Stepper({ label, prev, next }: { label: string; prev: string | null; ne
   );
 }
 
-/** A big number against its target, with what is left and a bar. */
-function Meter({ icon, title, value, target, unit, kind }: { icon: React.ReactNode; title: string; value: number; target: number | null; unit: string; kind: "calories" | "protein" }) {
-  const share = target ? value / target : 0;
-  const over = kind === "calories" && target !== null && value > target * 1.1;
-  const done = target !== null && (kind === "protein" ? value >= target : value >= target * 0.9 && !over);
-  return (
-    <section className="flex flex-col gap-2.5 rounded-[var(--radius-card)] bg-surface p-4 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
-      <h2 className="flex items-center gap-1.5 text-sm font-medium text-ink-muted">
-        {icon}
-        {title}
-      </h2>
-      <p className="flex items-baseline gap-1.5">
-        <span className="num text-4xl font-bold">{fmt(value)}</span>
-        {target ? (
-          <span className="num text-base text-ink-muted">
-            / {fmt(target)} {unit}
-          </span>
-        ) : (
-          <span className="text-sm text-ink-muted">{unit}</span>
-        )}
-      </p>
-      {target ? (
-        <>
-          <div className="h-3 overflow-hidden rounded-full bg-field" role="progressbar" aria-label={title} aria-valuenow={Math.round(Math.min(1, share) * 100)} aria-valuemin={0} aria-valuemax={100}>
-            <div className={`h-full rounded-full ${over ? "bg-coral" : done ? "bg-accent-strong" : "bg-sky"}`} style={{ width: `${Math.min(100, share * 100)}%` }} />
-          </div>
-          <p className={`text-sm ${over ? "text-coral" : done ? "font-medium text-accent-strong" : "text-ink-muted"}`}>
-            {value <= target ? (kind === "protein" && value >= target ? "הגעת ליעד" : `נותרו ${fmt(target - value)} ${unit}`) : kind === "protein" ? "הגעת ליעד" : `מעל היעד ב-${fmt(value - target)} ${unit}`}
-          </p>
-        </>
-      ) : null}
-    </section>
-  );
-}
-
 function DayView({
   day,
   today,
   target,
   protein,
-  eaten,
-  proteinEaten,
   workout,
   acts,
   foodDay,
   tracking,
   score,
+  diary,
 }: {
   score: SavedScore | null;
   day: string;
   today: string;
   target: number | null;
   protein: number | null;
-  eaten: number;
-  proteinEaten: number;
+  diary: Pick<FoodDayProps, "defaultMeal" | "recent" | "ideaContext" | "savedIdeas" | "photoEnabled">;
   workout: "done" | "partial" | "planned" | null;
   acts: { kind: string; min: number }[];
   foodDay: Awaited<ReturnType<typeof loadFoodDay>> | null;
@@ -233,12 +204,15 @@ function DayView({
     <>
       <Stepper label={label} prev={`/progress?r=day&d=${addDays(day, -1)}`} next={next} />
       {score ? <PastScore score={score} /> : null}
-      {tracking ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Meter kind="calories" icon={<Flame aria-hidden="true" className="size-4" />} title="קלוריות" value={eaten} target={target} unit="קל׳" />
-          <Meter kind="protein" icon={<Beef aria-hidden="true" className="size-4" />} title="חלבון" value={Math.round(proteinEaten)} target={protein} unit="ג׳" />
-        </div>
-      ) : null}
+      <FoodDay
+        dateLabel={dayName.format(new Date(`${day}T12:00:00Z`))}
+        isToday={day === today}
+        meals={(foodDay?.logs ?? []).map((l) => ({ id: l.id, mealType: l.mealType, text: l.text, loggedAt: l.loggedAt, status: l.status, items: l.items, source: l.source }))}
+        target={target}
+        proteinTarget={protein}
+        showNumbers={tracking}
+        {...diary}
+      />
       <section className="flex flex-col gap-3 rounded-[var(--radius-card)] bg-surface p-4 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
         <h2 className="flex items-center gap-1.5 text-sm font-medium text-ink-muted">
           <Dumbbell aria-hidden="true" className="size-4" />
@@ -264,7 +238,6 @@ function DayView({
           </ul>
         ) : null}
       </section>
-      <FoodDiary logs={foodDay?.logs ?? []} tracking={tracking} canAdd={day === today} />
     </>
   );
 }

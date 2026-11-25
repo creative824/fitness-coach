@@ -20,6 +20,9 @@ import { minutesFor, smartTasks, tasksByIds, type SmartTaskInput, type SmartTask
 import { requireUser } from "@/lib/data/user";
 import { loadFoodDay } from "@/lib/food/data";
 import { loadSavedFoods } from "@/lib/food/saved-data";
+import { mealTypeAt } from "@/lib/food/items";
+import { loadRecentMeals, type RecentMeal } from "@/lib/food/recent";
+import { QuickAddMeal } from "@/components/diary/quick-add";
 import { getDictionary } from "@/lib/i18n/he";
 import { loadDayLog, loadDayLogRange, rememberTasks } from "@/lib/menu/data";
 import { toView } from "@/lib/menu/view";
@@ -95,13 +98,14 @@ async function Today() {
     loadDayLogRange(user.id, addDays(date, -7), addDays(date, -1)).catch(() => new Map() as Awaited<ReturnType<typeof loadDayLogRange>>),
     loadFoodDay(user.id, addDays(date, -1)).catch(() => null),
     loadSavedFoods(user.id).catch(() => []),
+    loadRecentMeals(user.id, date).catch((): RecentMeal[] => []),
   ]);
   // The week's plan is made on its own the first time the week is opened.
   if (!week) {
     const made = await generateWeekPlan(user.id, weekStart).catch(() => null);
     if (made?.ok) [week, tasks] = await Promise.all([loadWeek(user.id, weekStart).catch(() => null), tasksOf()]);
   }
-  const [day, food, water, weights, scores, pool, past7, yFood, savedFoods] = await rest;
+  const [day, food, water, weights, scores, pool, past7, yFood, savedFoods, recent] = await rest;
   const past = [...scores.values()].map((x) => x.score);
   const history = { yesterday: scores.get(addDays(date, -1))?.score ?? null, weekAvg: past.length ? Math.round(past.reduce((a, b) => a + b, 0) / past.length) : null };
 
@@ -208,6 +212,7 @@ async function Today() {
         saved={day.saved}
       />
       <FitnessCard tasks={small} initial={day.fitness} weightKg={ctx.weightKg} saved={day.saved} />
+      <QuickAddMeal defaultMeal={mealTypeAt(minutes)} recent={recent} showNumbers={ctx.showNumbers} photoEnabled={Boolean(process.env.GEMINI_API_KEY)} />
     </DayProvider>
   );
 }

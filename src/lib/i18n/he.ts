@@ -319,6 +319,7 @@ export const he = {
         details: "פרטים",
         goals: "מטרות",
         nutrition: "תזונה",
+        taste: "בוא נכיר את הטעם שלך",
         fitness: "כושר",
         safety: "בריאות ובטיחות",
         lifestyle: "אורח חיים",

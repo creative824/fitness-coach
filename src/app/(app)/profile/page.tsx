@@ -13,6 +13,8 @@ import { AvatarCard } from "@/components/profile/avatar-card";
 import { FaceAvatar } from "@/components/ui/face-avatar";
 import { avatarFromSeed, parseAvatar } from "@/lib/avatar";
 import { TelegramCard } from "@/components/telegram/telegram-card";
+import { TasteCard } from "@/components/profile/taste-card";
+import { ALLERGENS } from "@/lib/onboarding/schema";
 import { createClient } from "@/lib/supabase/server";
 import { prizeTotal } from "@/lib/competitions/data";
 import { getDictionary } from "@/lib/i18n/he";
@@ -37,12 +39,15 @@ export default function ProfilePage() {
 async function ProfileContent() {
   const user = await requireUser();
   const supabase = await createClient();
-  const [profile, { data: prefs, error: prefsError }, { data: tgLink, error: tgError }, prizes] = await Promise.all([
+  const [profile, { data: prefs, error: prefsError }, { data: tgLink, error: tgError }, prizes, { data: food }] = await Promise.all([
     getProfileSummary(user.id),
     supabase.from("profiles").select("calorie_tracking, preferences").eq("user_id", user.id).maybeSingle(),
     supabase.from("telegram_links").select("linked_at").eq("user_id", user.id).maybeSingle(),
     prizeTotal(user.id),
+    supabase.from("food_preferences").select("likes, dislikes, allergies").eq("user_id", user.id).maybeSingle(),
   ]);
+  const taste = food as { likes?: string[]; dislikes?: string[]; allergies?: string[] } | null;
+  const never = (prefs as { preferences?: { never_eat?: unknown } } | null)?.preferences?.never_eat;
   const avatar = parseAvatar((prefs as { preferences?: { avatar?: unknown } } | null)?.preferences?.avatar);
   return (
     <>
@@ -75,6 +80,14 @@ async function ProfileContent() {
       {prefsError ? null : (
         <Card>
           <CalorieToggle on={(prefs as { calorie_tracking?: boolean } | null)?.calorie_tracking !== false} />
+        </Card>
+      )}
+      {prefsError ? null : (
+        <Card>
+          <TasteCard
+            initial={{ likes: taste?.likes ?? [], dislikes: taste?.dislikes ?? [], never: Array.isArray(never) ? never.filter((x): x is string => typeof x === "string") : [] }}
+            allergies={(taste?.allergies ?? []).filter((a): a is (typeof ALLERGENS)[number] => (ALLERGENS as readonly string[]).includes(a))}
+          />
         </Card>
       )}
       {tgError ? null : (

@@ -12,6 +12,8 @@
 import { FOODS, type FoodKey, type FoodTag, type MenuFood } from "@/content/menu-foods";
 import { MENU_MEALS, type MenuMeal, type SlotType } from "@/content/menu-meals";
 
+import { foodsFor } from "@/lib/food/prefs";
+
 export type { SlotType } from "@/content/menu-meals";
 
 export const SLOT_LABEL: Record<SlotType, string> = {
@@ -104,8 +106,11 @@ export function allowedFor(profile: DietProfile): (meal: MenuMeal) => boolean {
   if (p === "vegetarian") ["meat", "fish"].forEach((t) => block.add(t));
   if (p === "pescatarian") block.add("meat");
   const avoid = profile.avoid.map((x) => x.trim()).filter((x) => x.length >= 2);
+  // "דגים" stands for salmon and white fish, "גבינות" for every cheese (see food/prefs.ts).
+  const blocked = new Set(avoid.flatMap(foodsFor));
   return (meal) => {
     for (const t of tagsOf(meal)) if (block.has(t)) return false;
+    if (meal.parts.some((p) => !p.fixed && blocked.has(p.food))) return false;
     const words = [meal.title, ...meal.parts.map((x) => FOODS[x.food].name)];
     return !avoid.some((a) => words.some((w) => w.includes(a)));
   };

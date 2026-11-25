@@ -18,7 +18,7 @@ export type EstimateResult =
  * Tried in order. A model that is missing, retired, over its free quota or overloaded is
  * skipped, so one bad model name or one busy model does not stop the estimate.
  */
-const MODELS = [
+export const MODELS = [
   process.env.GEMINI_MODEL?.trim(),
   "gemini-2.5-flash",
   "gemini-flash-latest",
@@ -43,7 +43,7 @@ export function classifyGeminiError(status: number, body: string): "bad_key" | "
 }
 
 /** Fast answers: the 2.5 models think by default, which adds seconds and can hit the timeout. */
-function thinkingFor(model: string) {
+export function thinkingFor(model: string) {
   return model.startsWith("gemini-2.5") ? { thinkingConfig: { thinkingBudget: 0 } } : {};
 }
 

@@ -5,13 +5,17 @@ import { z } from "zod";
  * nothing here is presented as exact, and nothing scores eating less.
  */
 
-export const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"] as const;
+export const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack", "nibble", "other"] as const;
 export type MealType = (typeof MEAL_TYPES)[number];
+/** The kinds saved before 0013 ran; the others are stored as one of these until it does. */
+export const LEGACY_MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"] as const;
 export const MEAL_LABEL: Record<MealType, string> = {
   breakfast: "ארוחת בוקר",
   lunch: "ארוחת צהריים",
   dinner: "ארוחת ערב",
   snack: "ארוחת ביניים",
+  nibble: "נשנוש",
+  other: "ארוחה אחרת",
 };
 export const CONFIDENCE_LABEL = { low: "ודאות נמוכה", medium: "ודאות בינונית", high: "ודאות גבוהה" } as const;
 export type Confidence = keyof typeof CONFIDENCE_LABEL;

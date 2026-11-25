@@ -29,6 +29,7 @@ import { AvatarEditor } from "@/components/ui/avatar-editor";
 import { FaceAvatar } from "@/components/ui/face-avatar";
 import { avatarFromSeed } from "@/lib/avatar";
 import { ChipGroup, ListField, NumberField, TextField, YesNo } from "./fields";
+import { TastePicker } from "./taste-picker";
 
 const t = getDictionary();
 const s = t.screens.onboarding;
@@ -158,15 +159,27 @@ export function Questionnaire({ initial, initialStep }: { initial: OnboardingDra
       {key === "nutrition" && (
         <Card className="flex flex-col gap-5">
           <ChipGroup label={f.dietary_pattern} options={opts(DIETARY_PATTERNS, o.dietary_pattern)} value={draft.dietary_pattern ? [draft.dietary_pattern] : []} invalid={bad("dietary_pattern")} onChange={(v) => set("dietary_pattern", v[0] ?? null)} />
-          <ChipGroup label={`${f.allergies} ${s.optional}`} options={opts(ALLERGENS, o.allergies)} value={draft.allergies} multiple onChange={(v) => set("allergies", v)} />
           <ListField label={`${f.sensitivities} ${s.optional}`} hint={f.listHint} value={draft.sensitivities} onChange={(v) => set("sensitivities", v)} />
-          <ListField label={`${f.likes} ${s.optional}`} hint={f.listHint} value={draft.likes} onChange={(v) => set("likes", v)} />
-          <ListField label={`${f.dislikes} ${s.optional}`} hint={f.listHint} value={draft.dislikes} onChange={(v) => set("dislikes", v)} />
           <div className="grid grid-cols-2 gap-4">
             <NumberField label={f.meals_per_day} value={draft.meals_per_day} min={1} max={6} invalid={bad("meals_per_day")} onChange={(v) => set("meals_per_day", v)} />
             <NumberField label={f.cooking_minutes} value={draft.cooking_minutes} min={0} max={120} invalid={bad("cooking_minutes")} onChange={(v) => set("cooking_minutes", v)} />
           </div>
         </Card>
+      )}
+
+      {key === "taste" && (
+        <>
+          <p className="-mt-3 text-lg text-ink-muted">מה אתה אוהב לאכול? ככה ההצעות לארוחות יתאימו לך. אפשר לדלג ולהוסיף אחר כך מהפרופיל.</p>
+          <Card className="flex flex-col gap-5">
+            <TastePicker
+              value={{ likes: draft.likes, dislikes: draft.dislikes, never: draft.never_eat }}
+              onChange={(v) => setDraft((d) => ({ ...d, likes: v.likes, dislikes: v.dislikes, never_eat: v.never }))}
+            />
+          </Card>
+          <Card className="flex flex-col gap-3">
+            <ChipGroup label={`${f.allergies} ${s.optional}`} hint="אלרגיה היא הגבלה מחייבת: לא נציע שום דבר שמכיל אותה." options={opts(ALLERGENS, o.allergies)} value={draft.allergies} multiple onChange={(v) => set("allergies", v)} />
+          </Card>
+        </>
       )}
 
       {key === "fitness" && (
@@ -225,7 +238,7 @@ export function Questionnaire({ initial, initialStep }: { initial: OnboardingDra
         ) : null}
         {step < SUMMARY ? (
           <Button onClick={next} className="flex-[2]">
-            {step === SUMMARY - 1 ? s.finish : s.next}
+            {step === SUMMARY - 1 ? s.finish : key === "taste" && !draft.likes.length && !draft.dislikes.length && !draft.never_eat.length && !draft.allergies.length ? "דילוג" : s.next}
           </Button>
         ) : (
           <Button
@@ -305,9 +318,16 @@ function Summary({ draft, onEdit, onGoal }: { draft: OnboardingDraft; onEdit: (s
       step: "nutrition",
       items: [
         [f.dietary_pattern, draft.dietary_pattern ? o.dietary_pattern[draft.dietary_pattern] : "—"],
-        [f.allergies, list(draft.allergies.map((a) => o.allergies[a]))],
-        [f.dislikes, list(draft.dislikes)],
         [f.meals_per_day, String(draft.meals_per_day ?? "—")],
+      ],
+    },
+    {
+      step: "taste",
+      items: [
+        [f.likes, list(draft.likes)],
+        [f.dislikes, list(draft.dislikes)],
+        ["מאכלים שלא אוכלים", list(draft.never_eat)],
+        [f.allergies, list(draft.allergies.map((a) => o.allergies[a]))],
       ],
     },
     {
