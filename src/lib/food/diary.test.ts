@@ -138,3 +138,28 @@ describe("a unit with ו starts the next food", () => {
     ]);
   });
 });
+
+describe("when the AI joins in", () => {
+  const c = async (text: string) => (await import("./analyze")).complexity(text, parseFood(text));
+  it("leaves clear meals to the database", async () => {
+    expect((await c("2 ביצים, 2 פרוסות לחם מלא וכף טחינה")).complex).toBe(false);
+    expect((await c("חזה עוף, אורז וסלט")).complex).toBe(false);
+  });
+  it("asks the AI about recipes, restaurant plates, unknown words and mixed dishes", async () => {
+    expect(await c("הכנתי עוגת שוקולד ויצאו 12 פרוסות, אכלתי 2")).toMatchObject({ complex: true, reason: "recipe" });
+    expect(await c("מנה של פסטה ברוטב שמנת במסעדה")).toMatchObject({ complex: true });
+    expect(await c("2 ביצים וקרפלאך")).toMatchObject({ complex: true, reason: "unknown" });
+  });
+  it("sends the whole text for a complex meal and uses the AI's foods", async () => {
+    const before = process.env.GEMINI_API_KEY;
+    process.env.GEMINI_API_KEY = "k";
+    const reply = { not_food: false, dish: "עוגה", kind: "recipe", ingredients: [{ name: "קמח", qty: 200, unit: "g", approx: false, kcal_100: 364, protein_100: 10, carbs_100: 76, fat_100: 1 }], yield_min: 10, yield_max: 10, unit_name: "פרוסות", eaten_min: 2, eaten_max: 2 };
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(reply) }] } }] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const a = await analyzeText("הכנתי עוגה מ-200 גרם קמח, יצאו 10 פרוסות ואכלתי 2", async () => true);
+    process.env.GEMINI_API_KEY = before;
+    expect(fetchMock).toHaveBeenCalled();
+    expect(a.usedAi).toBe(true);
+    expect(JSON.stringify(fetchMock.mock.calls[0])).toContain("יצאו 10 פרוסות");
+  });
+});

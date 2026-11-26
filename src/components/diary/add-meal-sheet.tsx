@@ -248,6 +248,12 @@ export function AddMealSheet({
               </div>
             </div>
           ) : null}
+          {analysis?.usedAi ? (
+            <p className="flex items-center gap-1.5 text-xs text-ink-muted">
+              <Sparkles aria-hidden="true" className="size-3.5" />
+              הארוחה פוענחה בעזרת בינה מלאכותית, והערכים חושבו ממאגר המזון.
+            </p>
+          ) : null}
           {items.items.some((i) => i.confidence === "low") && showNumbers ? (
             <p className="text-xs text-ink-muted">חלק מהכמויות הוערכו לפי מנה רגילה. אפשר לשנות ב״עריכת כמויות״.</p>
           ) : null}
