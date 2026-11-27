@@ -15,7 +15,7 @@ export function CompetitionsStrip({ items, today, me }: { items: CompetitionCard
         </span>
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="text-sm font-semibold">תחרות עם חברים</span>
-          <span className="truncate text-xs text-ink-muted">מי מתמיד יותר בתפריט ובאימונים</span>
+          <span className="truncate text-xs text-ink-muted">מי מתמיד יותר ביומן ובאימונים</span>
         </span>
         <Link href="/competitions/new" className="inline-flex min-h-9 items-center gap-1 rounded-lg bg-brand px-3 text-sm font-medium text-white hover:bg-brand-strong">
           <Plus aria-hidden="true" className="size-4" />

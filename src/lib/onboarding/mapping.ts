@@ -18,7 +18,7 @@ export interface ProfileRow {
   water_cups_now: number | null;
   busy_days: number[];
   /** Small optional answers that have no column of their own. */
-  preferences?: { sex?: string | null; avatar?: unknown; target_date?: string | null };
+  preferences?: { sex?: string | null; avatar?: unknown; target_date?: string | null; never_eat?: string[] };
   safety_flags: { answers?: Partial<Record<SafetyQuestion, boolean | null>>; result?: SafetyResult; evaluated_at?: string };
   onboarding_step: number;
   onboarding_completed_at?: string | null;
@@ -73,7 +73,7 @@ export function draftToRows(userId: string, d: OnboardingDraft, step: number, no
     sleep_hours: d.sleep_hours,
     water_cups_now: d.water_cups_now,
     busy_days: d.busy_days,
-    preferences: { sex: d.sex, ...(d.avatar ? { avatar: d.avatar } : {}), target_date: d.target_date },
+    preferences: { sex: d.sex, ...(d.avatar ? { avatar: d.avatar } : {}), target_date: d.target_date, never_eat: d.never_eat },
     safety_flags: { answers: d.answers, result: safety, evaluated_at: now.toISOString() },
     onboarding_step: step,
   };
@@ -126,6 +126,8 @@ export function rowsToDraft(
     d.avatar = parseAvatar(p.preferences?.avatar);
     const td = p.preferences?.target_date;
     d.target_date = typeof td === "string" && /^\d{4}-\d{2}-\d{2}$/.test(td) ? td : null;
+    const never = p.preferences?.never_eat;
+    d.never_eat = Array.isArray(never) ? never.filter((x): x is string => typeof x === "string").slice(0, 40) : [];
     const answers = p.safety_flags?.answers ?? {};
     for (const q of SAFETY_QUESTIONS) d.answers[q] = answers[q] ?? null;
   }

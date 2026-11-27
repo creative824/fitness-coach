@@ -404,7 +404,9 @@ export function parseFood(text: string): ParseResult {
     if (u) {
       flushUnknown();
       const prev = drafts[drafts.length - 1];
-      if (pendingQty === null && prev && prev.unit === null && (wasAfterFood || !foodAhead(i + 1))) {
+      // "עגבנייה וכף טחינה": a unit with "ו" before a food starts the next food.
+      const startsNext = t.startsWith("ו") && !(t in UNIT_WORDS) && foodAhead(i + 1);
+      if (pendingQty === null && prev && prev.unit === null && ((wasAfterFood && !startsNext) || !foodAhead(i + 1))) {
         prev.unit = u;
         afterFood = true;
       } else pendingUnit = u;
@@ -526,7 +528,8 @@ export function withQuantity(item: ParsedItem, qty: number): ParsedItem {
   };
 }
 
-function relabel(unit: string, qty: number): string {
+/** The unit label for a new amount: "פרוסה" ↔ "פרוסות". */
+export function relabel(unit: string, qty: number): string {
   for (const [one, many] of Object.values(UNIT_LABEL)) {
     if (qty > 1 && unit.startsWith(one + " ")) return many + unit.slice(one.length);
     if (qty <= 1 && unit.startsWith(many + " ")) return one + unit.slice(many.length);

@@ -40,6 +40,8 @@ export type SafetyQuestion = (typeof SAFETY_QUESTIONS)[number];
 
 const day = z.int().min(0).max(6);
 const shortList = z.array(z.string().trim().min(1).max(40)).max(20);
+/** Taste lists: popular foods tapped from a grid, plus a few typed in. */
+const tasteList = z.array(z.string().trim().min(1).max(40)).max(40);
 const yesNo = z.boolean().nullable(); // null = not answered yet
 
 export const MIN_AGE = 18;
@@ -61,10 +63,14 @@ export const stepSchemas = {
     dietary_pattern: z.enum(DIETARY_PATTERNS),
     allergies: z.array(z.enum(ALLERGENS)),
     sensitivities: shortList,
-    likes: shortList,
-    dislikes: shortList,
     meals_per_day: z.int().min(1).max(6),
     cooking_minutes: z.int().min(0).max(120),
+  }),
+  /** "בוא נכיר את הטעם שלך": all optional, the step can be skipped. */
+  taste: z.object({
+    likes: tasteList,
+    dislikes: tasteList,
+    never_eat: tasteList,
   }),
   fitness: z.object({
     experience: z.enum(EXPERIENCE),
@@ -85,7 +91,7 @@ export const stepSchemas = {
   }),
 } as const;
 
-export const STEP_ORDER = ["details", "goals", "nutrition", "fitness", "safety", "lifestyle"] as const;
+export const STEP_ORDER = ["details", "goals", "nutrition", "taste", "fitness", "safety", "lifestyle"] as const;
 export type StepKey = (typeof STEP_ORDER)[number];
 
 /** Draft shape: everything optional/nullable so a half-filled form can be saved. */
@@ -105,6 +111,8 @@ export interface OnboardingDraft {
   sensitivities: string[];
   likes: string[];
   dislikes: string[];
+  /** Foods the user does not eat at all (not a dislike, not an allergy). */
+  never_eat: string[];
   meals_per_day: number | null;
   cooking_minutes: number | null;
   experience: (typeof EXPERIENCE)[number] | null;
@@ -136,6 +144,7 @@ export const emptyDraft = (): OnboardingDraft => ({
   sensitivities: [],
   likes: [],
   dislikes: [],
+  never_eat: [],
   meals_per_day: 3,
   cooking_minutes: 20,
   experience: null,
@@ -165,8 +174,9 @@ export const draftSchema = z.object({
   dietary_pattern: z.enum(DIETARY_PATTERNS).nullable(),
   allergies: z.array(z.enum(ALLERGENS)),
   sensitivities: shortList,
-  likes: shortList,
-  dislikes: shortList,
+  likes: tasteList,
+  dislikes: tasteList,
+  never_eat: tasteList.default([]),
   meals_per_day: z.int().min(1).max(8).nullable(),
   cooking_minutes: z.int().min(0).max(240).nullable(),
   experience: z.enum(EXPERIENCE).nullable(),
