@@ -6,7 +6,7 @@ import { analyzeText } from "./analyze";
 import { foldSalad, foodsLine, insightFor, itemLabel, nextFactor, orderMeals, scaleItem, sectionOf, summarize, titleOf, type DiaryMeal } from "./diary";
 import type { FoodItem } from "./items";
 import { parseFood, toFoodItem } from "./parse";
-import { readReply } from "./photo";
+import { asksFor } from "./asks";
 
 const item = (over: Partial<FoodItem> = {}): FoodItem => ({
   item_name: "ביצים",
@@ -99,11 +99,18 @@ describe("free text through the food engine", () => {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("photo reply", () => {
-  it("reads the text, or says there is no food", () => {
-    expect(readReply(JSON.stringify({ text: "2 ביצים, פרוסת לחם", not_food: false }))).toEqual({ ok: true, text: "2 ביצים, פרוסת לחם" });
-    expect(readReply(JSON.stringify({ text: "", not_food: true }))).toEqual({ ok: false, reason: "not_food" });
-    expect(readReply("nope")).toBeNull();
+describe("focused questions", () => {
+  it("asks about the spoon of tahini and the bread slices, with one tap answers", () => {
+    const r = parseFood("2 ביצים, 2 פרוסות לחם מלא וכף טחינה");
+    const asks = asksFor(r.items);
+    expect(asks.map((a) => a.text)).toEqual(expect.arrayContaining(["כמה גדולה הייתה הכף של הטחינה?", "הפרוסות היו דקות או עבות?"]));
+    expect(asks.every((a) => a.options.length === 3)).toBe(true);
+  });
+  it("does not ask when the amounts are clear", () => {
+    expect(asksFor(parseFood("2 ביצים ו-150 גרם יוגורט").items)).toEqual([]);
+  });
+  it("asks how much when a rich food has no amount", () => {
+    expect(asksFor(parseFood("אורז").items)[0]?.text).toBe("כמה אורז בערך?");
   });
 });
 

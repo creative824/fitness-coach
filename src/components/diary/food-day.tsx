@@ -1,12 +1,13 @@
 "use client";
 
-import { Beef, Check, ChevronLeft, Lightbulb, Plus, Send, Trophy } from "lucide-react";
+import { Beef, Check, ChevronLeft, Lightbulb, Loader2, Plus, Send, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { confirmFoodLog } from "@/lib/food/actions";
-import { clockOf, foodsLine, kcalMid, orderMeals, summarize, titleOf, type DiaryMeal } from "@/lib/food/diary";
-import { totalsOf, type MealType } from "@/lib/food/items";
-import type { RecentMeal } from "@/lib/food/recent";
+import { eatPlanned, removePlanned } from "@/lib/food/diary-actions";
+import { clockOf, foodsLine, kcalMid, summarize, type DiaryMeal } from "@/lib/food/diary";
+import { ideaBySlug, type PlannedIdea } from "@/lib/food/ideas";
+import { DIARY_MEALS, groupOf, MEAL_LABEL, totalsOf, type MealType } from "@/lib/food/items";
 import { AddMealSheet } from "./add-meal-sheet";
 import { EditMealSheet } from "./edit-meal-sheet";
 import { IdeaSheet, type IdeaContext } from "./idea-sheet";
@@ -20,29 +21,38 @@ export interface FoodDayProps {
   target: number | null;
   proteinTarget: number | null;
   showNumbers: boolean;
-  defaultMeal: MealType;
-  recent: RecentMeal[];
   ideaContext: Omit<IdeaContext, "eatenKcal" | "eatenProtein">;
-  savedIdeas: string[];
-  photoEnabled: boolean;
+  planned: PlannedIdea[];
+  /** Opened from the home screen's buttons. */
+  open?: "add" | "idea" | null;
 }
 
 /**
- * "יום האוכל שלי": what was eaten and what is left at a glance, the day's meals in order, and the
- * two things that matter: add a meal (+) and get a meal idea. Everything else is a tap away.
+ * "יום האוכל שלי": only what the user ate. The day's numbers at the top, the dishes by the meal
+ * the user chose, and two actions: "+ הוספת מנה" and "תן לי רעיון למנה". Dishes picked from the
+ * ideas wait apart, under "מנות שבחרתי", and count only after "אכלתי את המנה".
  */
 export function FoodDay(p: FoodDayProps) {
   const router = useRouter();
-  const [adding, setAdding] = useState(false);
-  const [ideas, setIdeas] = useState(false);
+  const [adding, setAdding] = useState(p.isToday && p.open === "add");
+  const [ideas, setIdeas] = useState(p.isToday && p.open === "idea");
   const [editing, setEditing] = useState<DiaryMeal | null>(null);
+  const [planned, setPlanned] = useState(p.planned);
   const [toast, setToast] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  const meals = useMemo(() => orderMeals(p.meals), [p.meals]);
   const sum = useMemo(() => summarize(p.meals, p.target, p.proteinTarget, { finished: !p.isToday }), [p.meals, p.target, p.proteinTarget, p.isToday]);
   const ideaContext = useMemo(() => ({ ...p.ideaContext, eatenKcal: sum.kcal, eatenProtein: sum.protein }), [p.ideaContext, sum.kcal, sum.protein]);
+  const groups = useMemo(
+    () =>
+      DIARY_MEALS.map((g) => ({ g, meals: p.meals.filter((m) => groupOf(m.mealType) === g).sort((a, b) => (a.loggedAt < b.loggedAt ? -1 : 1)) })).filter((x) => x.meals.length),
+    [p.meals],
+  );
 
+  useEffect(() => {
+    // "?open=add" from the home screen opens the sheet once, not again on every refresh.
+    if (p.open && typeof window !== "undefined") window.history.replaceState(null, "", window.location.pathname);
+  }, [p.open]);
   useEffect(() => {
     if (!toast) return;
     const id = setTimeout(() => setToast(null), 3500);
@@ -61,110 +71,94 @@ export function FoodDay(p: FoodDayProps) {
       <Header {...p} sum={sum} />
 
       {p.isToday ? (
-        <div className="flex gap-2.5">
+        <div className="flex flex-col gap-2.5">
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="inline-flex min-h-14 flex-[1.4] cursor-pointer items-center justify-center gap-2 rounded-2xl bg-brand text-lg font-semibold text-white shadow-[0_10px_24px_-12px_rgba(18,21,19,0.7)] hover:bg-brand-strong active:scale-[0.98]"
+            className="inline-flex min-h-16 w-full cursor-pointer items-center justify-center gap-2.5 rounded-2xl bg-brand text-xl font-bold text-white shadow-[0_12px_28px_-12px_rgba(18,21,19,0.75)] hover:bg-brand-strong active:scale-[0.98]"
           >
-            <Plus aria-hidden="true" className="size-6" strokeWidth={2.5} />
-            הוספת ארוחה
+            <Plus aria-hidden="true" className="size-7" strokeWidth={2.75} />
+            הוספת מנה
           </button>
           <button
             type="button"
             onClick={() => setIdeas(true)}
-            className="inline-flex min-h-14 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-2xl bg-surface px-3 font-medium leading-tight shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04] hover:bg-field active:scale-[0.98]"
+            className="inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-surface font-medium shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04] hover:bg-field active:scale-[0.98]"
           >
-            <Lightbulb aria-hidden="true" className="size-5 shrink-0 text-warning" />
-            תן לי רעיון לארוחה
+            <Lightbulb aria-hidden="true" className="size-5 text-warning" />
+            תן לי רעיון למנה
           </button>
         </div>
       ) : null}
 
-      <section aria-label="הארוחות של היום" className="flex flex-col gap-2.5" aria-busy={pending}>
-        {meals.map((m) => {
-          const t = totalsOf(m.items);
-          const kcal = m.items.reduce((a, i) => a + kcalMid(i), 0);
-          const line = foodsLine(m.items) || m.text;
+      <section aria-label="מה אכלתי" className="flex flex-col gap-4" aria-busy={pending}>
+        {!groups.length ? (
+          <p className="rounded-[var(--radius-card)] bg-surface p-5 text-center text-lg text-ink-muted shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
+            {p.isToday ? "עדיין לא הוספת מנות להיום. מתחילים?" : "לא נרשם אוכל ביום הזה."}
+          </p>
+        ) : null}
+        {groups.map(({ g, meals }) => {
+          const kcal = meals.filter((m) => m.status === "confirmed").reduce((a, m) => a + m.items.reduce((x, i) => x + kcalMid(i), 0), 0);
           return (
-            <article key={m.id} className="relative">
-              <button
-                type="button"
-                onClick={() => setEditing(m)}
-                className="flex w-full cursor-pointer flex-col gap-1.5 rounded-[var(--radius-card)] bg-surface p-4 text-start shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04] transition-colors hover:bg-white active:scale-[0.99]"
-                aria-label={`${titleOf(m.mealType, m.loggedAt)} ${clockOf(m.loggedAt)}, לעריכה`}
-              >
-                <span className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2">
-                    <span className="font-semibold">{titleOf(m.mealType, m.loggedAt)}</span>
-                    <span className="num text-sm text-ink-muted">{clockOf(m.loggedAt)}</span>
-                    {m.source === "telegram" ? <Send aria-label="מטלגרם" className="size-3.5 text-ink-muted" /> : null}
-                    {m.status === "draft" ? <span className="rounded-full bg-warning-soft px-2 py-0.5 text-xs text-warning">ממתין לאישור</span> : null}
-                  </span>
-                  <ChevronLeft aria-hidden="true" className="size-4 text-ink-faint" />
-                </span>
-                <span className="leading-snug">{line}</span>
-                {p.showNumbers && m.items.some((i) => i.kcal_min !== null) ? (
+            <div key={g} className="flex flex-col gap-2">
+              <h2 className="flex items-baseline justify-between gap-2 px-1">
+                <span className="text-lg font-semibold">{MEAL_LABEL[g]}</span>
+                {p.showNumbers && kcal ? (
                   <span className="text-sm text-ink-muted">
                     <span className="num font-semibold text-ink">{fmt(kcal)}</span> קלוריות
-                    {t.protein ? (
-                      <>
-                        {" | "}
-                        <span className="num font-semibold text-ink">{t.protein}</span> גרם חלבון
-                      </>
-                    ) : null}
                   </span>
                 ) : null}
-              </button>
-              {m.status === "draft" ? (
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() =>
+              </h2>
+              {meals.map((m) => (
+                <MealCard
+                  key={m.id}
+                  meal={m}
+                  showNumbers={p.showNumbers}
+                  busy={pending}
+                  onEdit={() => setEditing(m)}
+                  onConfirm={() =>
                     start(async () => {
                       await confirmFoodLog(m.id);
                       router.refresh();
                     })
                   }
-                  className="absolute end-12 top-3 inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-lg bg-accent-soft px-2.5 text-sm font-medium hover:brightness-95"
-                >
-                  <Check aria-hidden="true" className="size-4" />
-                  אישור
-                </button>
-              ) : null}
-            </article>
+                />
+              ))}
+            </div>
           );
         })}
-
-        {p.isToday ? (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="flex min-h-14 cursor-pointer items-center justify-center gap-2 rounded-[var(--radius-card)] border-2 border-dashed border-line text-ink-muted hover:border-ink/20 hover:text-ink"
-          >
-            <Plus aria-hidden="true" className="size-5" />
-            {meals.length ? "הוספת ארוחה נוספת" : "הוספת הארוחה הראשונה של היום"}
-          </button>
-        ) : !meals.length ? (
-          <p className="rounded-[var(--radius-card)] bg-surface p-4 text-ink-muted">לא נרשם אוכל ביום הזה.</p>
-        ) : null}
       </section>
 
-      {sum.meals ? <Summary sum={sum} showNumbers={p.showNumbers} isToday={p.isToday} /> : null}
+      {p.isToday && planned.length ? (
+        <Planned
+          planned={planned}
+          context={ideaContext}
+          showNumbers={p.showNumbers}
+          onChange={setPlanned}
+          onEaten={(m) => done(p.showNumbers && m.kcal ? `נוסף ליומן: ${fmt(m.kcal)} קלוריות, ${fmt(m.protein)} גרם חלבון.` : "נוסף ליומן.")}
+        />
+      ) : null}
 
       {adding ? (
         <AddMealSheet
-          open
           onClose={() => setAdding(false)}
           onAdded={(m) => done(p.showNumbers && m.kcal ? `נוסף ליומן: ${fmt(m.kcal)} קלוריות, ${fmt(m.protein)} גרם חלבון.` : "נוסף ליומן.")}
-          defaultMeal={p.defaultMeal}
-          recent={p.recent}
           showNumbers={p.showNumbers}
-          photoEnabled={p.photoEnabled}
         />
       ) : null}
       {editing ? <EditMealSheet key={editing.id} meal={editing} onClose={() => setEditing(null)} onDone={done} showNumbers={p.showNumbers} /> : null}
-      <IdeaSheet open={ideas} onClose={() => setIdeas(false)} onEaten={done} context={ideaContext} saved={p.savedIdeas} showNumbers={p.showNumbers} />
+      {ideas ? (
+        <IdeaSheet
+          onClose={() => setIdeas(false)}
+          onPlanned={(list) => {
+            setPlanned(list);
+            setIdeas(false);
+            setToast("המנה נשמרה ב״מנות שבחרתי״. היא תיספר רק כשתסמן שאכלת.");
+          }}
+          context={ideaContext}
+          showNumbers={p.showNumbers}
+        />
+      ) : null}
 
       {toast ? (
         <p
@@ -175,6 +169,184 @@ export function FoodDay(p: FoodDayProps) {
         </p>
       ) : null}
     </>
+  );
+}
+
+function MealCard({ meal: m, showNumbers, busy, onEdit, onConfirm }: { meal: DiaryMeal & { source?: "web" | "telegram" }; showNumbers: boolean; busy: boolean; onEdit: () => void; onConfirm: () => void }) {
+  const t = totalsOf(m.items);
+  const kcal = m.items.reduce((a, i) => a + kcalMid(i), 0);
+  const name = dishName(m.text, m.items);
+  return (
+    <article className="relative">
+      <button
+        type="button"
+        onClick={onEdit}
+        className="flex w-full cursor-pointer flex-col gap-1.5 rounded-[var(--radius-card)] bg-surface p-4 text-start shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04] transition-colors hover:bg-white active:scale-[0.99]"
+        aria-label={`${name}, ${clockOf(m.loggedAt)}, לעריכה או מחיקה`}
+      >
+        <span className="flex items-start justify-between gap-2">
+          <span className="leading-snug font-semibold">{name}</span>
+          <ChevronLeft aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-ink-faint" />
+        </span>
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-muted">
+          <span className="num">{clockOf(m.loggedAt)}</span>
+          <span>·</span>
+          <span>{MEAL_LABEL[groupOf(m.mealType)]}</span>
+          {m.source === "telegram" ? <Send aria-label="מטלגרם" className="size-3.5" /> : null}
+          {m.status === "draft" ? <span className="rounded-full bg-warning-soft px-2 py-0.5 text-xs text-warning">ממתין לאישור</span> : null}
+        </span>
+        {showNumbers && m.items.some((i) => i.kcal_min !== null) ? (
+          <span className="text-sm text-ink-muted">
+            <span className="num text-base font-bold text-ink">{fmt(kcal)}</span> קלוריות
+            {" · "}
+            <span className="num font-semibold text-ink">{fmt(t.protein ?? 0)}</span> גרם חלבון
+          </span>
+        ) : null}
+      </button>
+      {m.status === "draft" ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onConfirm}
+          className="absolute end-12 bottom-3 inline-flex min-h-9 cursor-pointer items-center gap-1 rounded-lg bg-accent-soft px-2.5 text-sm font-medium hover:brightness-95"
+        >
+          <Check aria-hidden="true" className="size-4" />
+          אישור
+        </button>
+      ) : null}
+    </article>
+  );
+}
+
+/** What the user wrote, when it is short enough to be a name ("חזה עוף ואורז"); else the foods. */
+function dishName(text: string, items: DiaryMeal["items"]): string {
+  const t = text.replace(/^(אכלתי|היום אכלתי|שתיתי)\s+/, "").replace(/[.\s]+$/, "").trim();
+  return t && t.length <= 45 ? t : foodsLine(items) || text;
+}
+
+/** "מנות שבחרתי": ideas picked today. Not in the diary and not counted until "אכלתי את המנה". */
+function Planned({
+  planned,
+  context,
+  showNumbers,
+  onChange,
+  onEaten,
+}: {
+  planned: PlannedIdea[];
+  context: IdeaContext;
+  showNumbers: boolean;
+  onChange: (list: PlannedIdea[]) => void;
+  onEaten: (m: { kcal: number; protein: number }) => void;
+}) {
+  const [asking, setAsking] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [, start] = useTransition();
+  const refs = useRef(new Map<string, string>());
+  const list = planned.flatMap((x) => {
+    const idea = ideaBySlug(x.slug, x.kcal, context.profile, context.taste);
+    return idea ? [{ x, idea }] : [];
+  });
+  if (!list.length) return null;
+
+  const eat = (id: string, mealType: MealType, kcal: number, protein: number) => {
+    if (!refs.current.has(id)) refs.current.set(id, crypto.randomUUID());
+    setBusy(id);
+    setNote(null);
+    start(async () => {
+      const r = await eatPlanned({ id, mealType, clientRef: refs.current.get(id)! }).catch(() => ({ ok: false }));
+      setBusy(null);
+      if (!r.ok) {
+        setNote("לא הצלחתי להוסיף. נסו שוב בעוד רגע.");
+        return;
+      }
+      setAsking(null);
+      onChange(planned.filter((p) => p.id !== id));
+      onEaten({ kcal, protein });
+    });
+  };
+  const remove = (id: string) => {
+    setBusy(id);
+    start(async () => {
+      const r = await removePlanned(id).catch(() => ({ ok: false, planned }));
+      setBusy(null);
+      if (r.ok) onChange(r.planned);
+    });
+  };
+
+  return (
+    <section aria-labelledby="planned-title" className="flex flex-col gap-2.5 rounded-[var(--radius-card)] border-2 border-dashed border-line p-3.5">
+      <div className="flex flex-col px-1">
+        <h2 id="planned-title" className="font-semibold">
+          מנות שבחרתי
+        </h2>
+        <p className="text-sm text-ink-muted">רעיונות בלבד. עוד לא נספרו ביומן.</p>
+      </div>
+      {list.map(({ x, idea }) => (
+        <article key={x.id} className="flex flex-col gap-2.5 rounded-2xl bg-surface p-3.5 ring-1 ring-ink/[0.04]">
+          <div className="flex items-center gap-3">
+            <span aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-2xl">
+              {idea.emoji}
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="leading-snug font-semibold">{idea.title}</span>
+              {showNumbers ? (
+                <span className="text-sm text-ink-muted">
+                  <span className="num">{fmt(idea.meal.kcal)}</span> קלוריות · <span className="num">{fmt(idea.meal.protein)}</span> גרם חלבון
+                </span>
+              ) : null}
+            </span>
+            <button
+              type="button"
+              onClick={() => remove(x.id)}
+              disabled={busy === x.id}
+              aria-label={`לא אכלתי, להסיר את ${idea.title}`}
+              className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-ink-muted hover:bg-field hover:text-ink"
+            >
+              <X aria-hidden="true" className="size-5" />
+            </button>
+          </div>
+          {asking === x.id ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium">לאיזו ארוחה להוסיף?</p>
+              <div className="grid grid-cols-2 gap-2">
+                {DIARY_MEALS.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    disabled={busy === x.id}
+                    onClick={() => eat(x.id, m, idea.meal.kcal, idea.meal.protein)}
+                    className="min-h-11 cursor-pointer rounded-xl bg-field font-medium hover:bg-line/70 disabled:opacity-50"
+                  >
+                    {MEAL_LABEL[m]}
+                  </button>
+                ))}
+              </div>
+              {busy === x.id ? <Loader2 aria-label="מוסיף" className="size-4 animate-spin self-center" /> : null}
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setAsking(x.id)}
+                className="inline-flex min-h-11 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-brand font-semibold text-white hover:bg-brand-strong"
+              >
+                <Check aria-hidden="true" className="size-4" />
+                אכלתי את המנה
+              </button>
+              <button type="button" onClick={() => remove(x.id)} disabled={busy === x.id} className="min-h-11 cursor-pointer rounded-xl px-3 text-sm text-ink-muted hover:bg-field hover:text-ink">
+                לא אכלתי
+              </button>
+            </div>
+          )}
+        </article>
+      ))}
+      {note ? (
+        <p role="status" className="rounded-xl bg-field px-3 py-2 text-sm">
+          {note}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
@@ -190,20 +362,10 @@ function Header({ dateLabel, target, proteinTarget, showNumbers, sum }: FoodDayP
       </div>
       {showNumbers ? (
         <>
-          <div className="flex items-end justify-between gap-3">
-            <p className="flex flex-col">
-              <span className="text-xs text-white/60">נאכלו</span>
-              <span>
-                <span className="num text-5xl leading-none font-bold">{fmt(sum.kcal)}</span>
-                {target ? <span className="num text-base text-white/60"> / {fmt(target)}</span> : null}
-              </span>
-            </p>
-            {left !== null ? (
-              <p className="flex flex-col items-end text-end">
-                <span className="text-xs text-white/60">{over ? "מעל היעד" : "נותרו"}</span>
-                <span className={`num text-3xl leading-none font-bold ${over ? "text-coral" : "text-accent"}`}>{fmt(Math.abs(left))}</span>
-              </p>
-            ) : null}
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <Figure label="נאכלו" value={fmt(sum.kcal)} />
+            <Figure label="היעד היומי" value={target ? fmt(target) : "–"} />
+            <Figure label={over ? "מעל היעד" : "נותרו"} value={left !== null ? fmt(Math.abs(left)) : "–"} tone={over ? "text-coral" : "text-accent"} />
           </div>
           {target ? (
             <div
@@ -221,7 +383,7 @@ function Header({ dateLabel, target, proteinTarget, showNumbers, sum }: FoodDayP
             <span className="inline-flex items-center gap-1.5">
               <Beef aria-hidden="true" className="size-4 text-white/60" />
               חלבון: <span className="num font-semibold">{fmt(sum.protein)}</span>
-              {proteinTarget ? <span className="num text-white/60">/ {proteinTarget} גרם</span> : <span className="text-white/60">גרם</span>}
+              {proteinTarget ? <span className="num text-white/60">מתוך {proteinTarget} גרם</span> : <span className="text-white/60">גרם</span>}
             </span>
             {proteinTarget ? (
               <span className="h-2 w-24 overflow-hidden rounded-full bg-white/10" aria-hidden="true">
@@ -234,10 +396,10 @@ function Header({ dateLabel, target, proteinTarget, showNumbers, sum }: FoodDayP
         <p className="text-white/80">
           {sum.meals ? (
             <>
-              נרשמו היום <span className="num font-semibold">{sum.meals}</span> ארוחות.
+              נרשמו היום <span className="num font-semibold">{sum.meals}</span> מנות.
             </>
           ) : (
-            "עוד לא נרשמו ארוחות היום."
+            "עוד לא נרשמו מנות היום."
           )}
         </p>
       )}
@@ -245,42 +407,11 @@ function Header({ dateLabel, target, proteinTarget, showNumbers, sum }: FoodDayP
   );
 }
 
-function Summary({ sum, showNumbers, isToday }: { sum: ReturnType<typeof summarize>; showNumbers: boolean; isToday: boolean }) {
-  const met = sum.calorieGoal === "on" && sum.proteinGoal !== false;
+function Figure({ label, value, tone = "" }: { label: string; value: string; tone?: string }) {
   return (
-    <section aria-labelledby="sum-title" className="flex flex-col gap-3 rounded-[var(--radius-card)] bg-surface p-4 shadow-[var(--shadow-card)] ring-1 ring-ink/[0.04]">
-      <h2 id="sum-title" className="flex items-center gap-1.5 font-semibold">
-        {met ? <Trophy aria-hidden="true" className="size-4 text-accent-strong" /> : null}
-        {isToday ? "סיכום היום עד עכשיו" : "סיכום היום"}
-      </h2>
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-sm">
-        <Stat label="ארוחות שתועדו" value={String(sum.meals)} />
-        {showNumbers ? (
-          <>
-            <Stat label="קלוריות" value={sum.target ? `${fmt(sum.kcal)} / ${fmt(sum.target)}` : fmt(sum.kcal)} />
-            <Stat label="חלבון" value={sum.proteinTarget ? `${fmt(sum.protein)} / ${sum.proteinTarget} ג׳` : `${fmt(sum.protein)} ג׳`} />
-            {sum.left !== null ? <Stat label={sum.left >= 0 ? "נשאר מהיעד" : "מעל היעד"} value={`${fmt(Math.abs(sum.left))} קל׳`} /> : null}
-            {sum.richest ? <Stat label="הכי עשירה בחלבון" value={`${sum.richest.title} (${sum.richest.protein} ג׳)`} wide /> : null}
-            {sum.calorieGoal && (!isToday || sum.calorieGoal === "on" || sum.proteinGoal) ? (
-              <Stat
-                label="יעדים"
-                wide
-                value={`${sum.calorieGoal === "on" ? "✓ קלוריות בטווח" : sum.calorieGoal === "over" ? "קלוריות מעל היעד" : isToday ? "קלוריות: עוד לא" : "קלוריות מתחת ליעד"}${sum.proteinGoal === null ? "" : sum.proteinGoal ? " · ✓ חלבון" : " · חלבון: עוד לא"}`}
-              />
-            ) : null}
-          </>
-        ) : null}
-      </dl>
-      {showNumbers && sum.insight ? <p className="rounded-xl bg-accent-soft px-3 py-2 text-sm">{sum.insight}</p> : null}
-    </section>
-  );
-}
-
-function Stat({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
-  return (
-    <div className={wide ? "col-span-2" : ""}>
-      <dt className="text-xs text-ink-muted">{label}</dt>
-      <dd className="num font-semibold">{value}</dd>
-    </div>
+    <p className="flex flex-col gap-1">
+      <span className="text-xs text-white/60">{label}</span>
+      <span className={`num text-3xl leading-none font-bold ${tone}`}>{value}</span>
+    </p>
   );
 }

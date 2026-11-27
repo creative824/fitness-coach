@@ -28,6 +28,11 @@ export function useMealItems(initial: FoodItem[]) {
       const next = nextFactor(base[i], factors[i], dir);
       if (next !== null) setFactors((f) => f.map((x, k) => (k === i ? next : x)));
     },
+    /** Puts another version of one food in its place (an answer to a question), at its own amount. */
+    replace(i: number, item: FoodItem) {
+      setBase((b) => b.map((x, k) => (k === i ? item : x)));
+      setFactors((f) => f.map((x, k) => (k === i ? 1 : x)));
+    },
     remove(i: number) {
       setBase((b) => b.filter((_, k) => k !== i));
       setFactors((f) => f.filter((_, k) => k !== i));

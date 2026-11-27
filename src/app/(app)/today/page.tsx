@@ -8,7 +8,6 @@ import { CompetitionsStrip } from "@/components/home/competitions-strip";
 import { DayProvider } from "@/components/home/day-context";
 import { FitnessCard, type SmallTask } from "@/components/home/fitness-card";
 import { TodayWorkout } from "@/components/workout/today-workout";
-import { MenuCard } from "@/components/home/menu-card";
 import { DaySummary } from "@/components/home/day-summary";
 import { DayExtras } from "@/components/home/day-extras";
 import { ButtonLink } from "@/components/ui/button";
@@ -19,13 +18,9 @@ import { loadScores } from "@/lib/day/score-data";
 import { minutesFor, smartTasks, tasksByIds, type SmartTaskInput, type SmartTaskKind } from "@/lib/day/smart-tasks";
 import { requireUser } from "@/lib/data/user";
 import { loadFoodDay } from "@/lib/food/data";
-import { loadSavedFoods } from "@/lib/food/saved-data";
-import { mealTypeAt } from "@/lib/food/items";
-import { loadRecentMeals, type RecentMeal } from "@/lib/food/recent";
-import { QuickAddMeal } from "@/components/diary/quick-add";
+import { HomeFood } from "@/components/diary/home-food";
 import { getDictionary } from "@/lib/i18n/he";
 import { loadDayLog, loadDayLogRange, rememberTasks } from "@/lib/menu/data";
-import { toView } from "@/lib/menu/view";
 import { generateWeekPlan, loadDayTasks, loadWeek } from "@/lib/plan/data";
 import { PER_SIDE } from "@/lib/plan/duration";
 import { loadWorkoutPool, type WorkoutPool } from "@/lib/workout/data";
@@ -56,8 +51,8 @@ export default function TodayPage() {
 const mid = (r: [number, number] | null | undefined) => (r ? Math.round((r[0] + r[1]) / 2) : null);
 
 /**
- * The one screen to follow the day: competitions, today's / this week's status, the menu and
- * the workout. Everything else is one tap away.
+ * The one screen to follow the day: competitions, today's / this week's status, the food of the
+ * day and the workout. Everything else is one tap away.
  */
 async function Today() {
   const user = await requireUser();
@@ -97,15 +92,13 @@ async function Today() {
     loadWorkoutPool(ctx.draft).catch((): WorkoutPool => ({ pool: [], cards: {}, ids: new Map() })),
     loadDayLogRange(user.id, addDays(date, -7), addDays(date, -1)).catch(() => new Map() as Awaited<ReturnType<typeof loadDayLogRange>>),
     loadFoodDay(user.id, addDays(date, -1)).catch(() => null),
-    loadSavedFoods(user.id).catch(() => []),
-    loadRecentMeals(user.id, date).catch((): RecentMeal[] => []),
   ]);
   // The week's plan is made on its own the first time the week is opened.
   if (!week) {
     const made = await generateWeekPlan(user.id, weekStart).catch(() => null);
     if (made?.ok) [week, tasks] = await Promise.all([loadWeek(user.id, weekStart).catch(() => null), tasksOf()]);
   }
-  const [day, food, water, weights, scores, pool, past7, yFood, savedFoods, recent] = await rest;
+  const [day, food, water, weights, scores, pool, past7, yFood] = await rest;
   const past = [...scores.values()].map((x) => x.score);
   const history = { yesterday: scores.get(addDays(date, -1))?.score ?? null, weekAvg: past.length ? Math.round(past.reduce((a, b) => a + b, 0) / past.length) : null };
 
@@ -200,7 +193,13 @@ async function Today() {
         water={water ? { drank: water.logs.reduce((a, b) => a + b, 0), target: waterTarget, vesselMl: water.vesselMl, taskId: waterTask?.id ?? null } : null}
         weight={weight}
       />
-      <MenuCard initial={toView(day.menu, ctx.profile)} showNumbers={ctx.showNumbers} saved={day.saved} aiEnabled={Boolean(process.env.GEMINI_API_KEY)} savedFoods={savedFoods} />
+      <HomeFood
+        meals={(food?.logs ?? []).filter((l) => l.status === "confirmed").length}
+        kcal={mid(food?.totals.kcal) ?? 0}
+        protein={food?.totals.protein ?? 0}
+        target={ctx.showNumbers ? ctx.target : null}
+        showNumbers={ctx.showNumbers}
+      />
       <TodayWorkout
         initial={todayWorkout}
         title={own ? null : (w?.title ?? null)}
@@ -212,7 +211,6 @@ async function Today() {
         saved={day.saved}
       />
       <FitnessCard tasks={small} initial={day.fitness} weightKg={ctx.weightKg} saved={day.saved} />
-      <QuickAddMeal defaultMeal={mealTypeAt(minutes)} recent={recent} showNumbers={ctx.showNumbers} photoEnabled={Boolean(process.env.GEMINI_API_KEY)} />
     </DayProvider>
   );
 }

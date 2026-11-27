@@ -1,8 +1,7 @@
 import "server-only";
-import { loadDayContext, type DayContext } from "@/lib/day/context";
 import { createClient } from "@/lib/supabase/server";
 import { sessionsOf, storedWorkoutOf, type StoredSession, type StoredWorkout } from "@/lib/workout/today";
-import { buildMenu, seedFrom, upgradeMenu, type DayMenu } from "./engine";
+import type { DayMenu } from "./engine";
 
 export interface FitnessState {
   /** Keys of exercises marked done: "ex:<block index>". */
@@ -18,9 +17,8 @@ export interface FitnessState {
 }
 
 export interface DayLog {
-  /** False when the 0009 migration has not run: the menu is shown but not saved. */
+  /** False when the 0009 migration has not run: nothing of the day is saved. */
   saved: boolean;
-  menu: DayMenu;
   fitness: FitnessState;
 }
 
@@ -47,37 +45,19 @@ function withWorkout(f: Partial<FitnessState>): Pick<FitnessState, "workout" | "
   return { ...(workout ? { workout } : {}), ...(sessions.length ? { sessions } : {}), ...(tasks.length ? { tasks } : {}) };
 }
 
-export function freshMenu(ctx: DayContext, userId: string, date: string, seed = seedFrom(`${userId}:${date}`)): DayMenu {
-  return buildMenu({ target: ctx.menuKcal, mealsPerDay: ctx.mealsPerDay, profile: ctx.profile, seed, custom: ctx.slotKcal });
-}
-
-/** Today's row, creating the menu the first time the day is opened. */
+/**
+ * Today's row (activities, workout, small tasks). No menu is made any more: the food diary shows
+ * only what the user ate, and meal ideas are asked for, never planned ahead.
+ */
 export async function loadDayLog(userId: string, date: string): Promise<DayLog> {
   const supabase = await createClient();
-  const ctx = await loadDayContext(userId);
-  const { data, error } = await supabase.from("day_logs").select("menu, fitness").eq("user_id", userId).eq("date", date).maybeSingle();
-  if (error) return { saved: false, menu: freshMenu(ctx, userId, date), fitness: EMPTY_FITNESS };
-  if (data && isMenu(data.menu)) {
-    const menu = upgradeMenu(data.menu, { target: ctx.menuKcal, mealsPerDay: ctx.mealsPerDay, profile: ctx.profile, custom: ctx.slotKcal });
-    if (menu !== data.menu) {
-      const { error: upErr } = await supabase.from("day_logs").update({ menu }).eq("user_id", userId).eq("date", date);
-      if (upErr) console.error("day_logs menu upgrade failed", upErr.message);
-    }
-    return { saved: true, menu, fitness: fitnessOf(data.fitness) };
-  }
-
-  const menu = freshMenu(ctx, userId, date);
-  const write = data
-    ? await supabase.from("day_logs").update({ menu }).eq("user_id", userId).eq("date", date).is("menu", null)
-    : await supabase.from("day_logs").upsert({ user_id: userId, date, menu }, { onConflict: "user_id,date", ignoreDuplicates: true });
-  if (write.error) console.error("day_logs menu insert failed", write.error.message);
-  // A parallel request may have written first: read back what is stored.
-  const { data: again } = await supabase.from("day_logs").select("menu, fitness").eq("user_id", userId).eq("date", date).maybeSingle();
-  return {
-    saved: !write.error,
-    menu: again && isMenu(again.menu) ? again.menu : menu,
-    fitness: fitnessOf(again?.fitness ?? data?.fitness),
-  };
+  const { data, error } = await supabase.from("day_logs").select("fitness").eq("user_id", userId).eq("date", date).maybeSingle();
+  if (error) return { saved: false, fitness: EMPTY_FITNESS };
+  if (data) return { saved: true, fitness: fitnessOf(data.fitness) };
+  const write = await supabase.from("day_logs").upsert({ user_id: userId, date }, { onConflict: "user_id,date", ignoreDuplicates: true });
+  if (write.error) console.error("day_logs insert failed", write.error.message);
+  const { data: again } = await supabase.from("day_logs").select("fitness").eq("user_id", userId).eq("date", date).maybeSingle();
+  return { saved: !write.error, fitness: fitnessOf(again?.fitness) };
 }
 
 /**
@@ -94,7 +74,7 @@ export async function rememberTasks(userId: string, date: string, ids: string[])
   if (error) console.error("remember tasks failed", error.message);
 }
 
-/** Days of a range with their menus' targets and activities, for the tracking screens. */
+/** Days of a range with the targets of their old menus (days before the diary) and activities, for the tracking screens. */
 export async function loadDayLogRange(userId: string, from: string, to: string): Promise<Map<string, { target: number | null; fitness: FitnessState }>> {
   const supabase = await createClient();
   const { data, error } = await supabase.from("day_logs").select("date, menu, fitness").eq("user_id", userId).gte("date", from).lte("date", to);

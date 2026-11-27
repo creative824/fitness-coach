@@ -8,11 +8,10 @@ import { createClient } from "@/lib/supabase/server";
 import { localDay } from "@/lib/water/time";
 import { ALLERGENS } from "@/lib/onboarding/schema";
 import { analyzeText, type Analysis } from "./analyze";
-import { loadFoodDay } from "./data";
-import { ideaBySlug, ideaItems, IDEA_KINDS, SIZES } from "./ideas";
+import { mealBySlug } from "@/lib/menu/engine";
+import { ideaBySlug, ideaItems, plannedOf, type PlannedIdea } from "./ideas";
 import { foodItemSchema, LEGACY_MEAL_TYPES, MEAL_TYPES, type FoodItem, type MealType } from "./items";
 import { DAILY_ESTIMATE_LIMIT } from "./limits";
-import { describePhoto, type PhotoResult } from "./photo";
 import { TASTE_LIMIT } from "./prefs";
 
 /** Every screen that shows the day's numbers: they update as soon as a meal is saved. */
@@ -45,21 +44,6 @@ export async function analyzeMeal(text: string): Promise<{ ok: true; analysis: A
     console.error("analyzeMeal failed", e instanceof Error ? e.message : e);
     return { ok: false };
   }
-}
-
-const photo = z.object({
-  mime: z.enum(["image/jpeg", "image/png", "image/webp"]),
-  // About 1.4 MB of base64 at most; the browser shrinks photos to ~1024 px before sending.
-  data: z.string().min(100).max(1_900_000).regex(/^[A-Za-z0-9+/=]+$/),
-});
-
-/** "צילום אוכל": the photo becomes a line of text the user can still change. */
-export async function readMealPhoto(input: z.input<typeof photo>): Promise<PhotoResult | { ok: false; reason: "limit" }> {
-  const parsed = photo.safeParse(input);
-  if (!parsed.success) return { ok: false, reason: "failed" };
-  await requireUser();
-  if (!(await takeAiQuota())) return { ok: false, reason: "limit" };
-  return describePhoto(parsed.data.data, parsed.data.mime);
 }
 
 const addSchema = z.object({
@@ -153,64 +137,56 @@ export async function deleteMeal(id: string): Promise<{ ok: boolean }> {
 
 // ───────────────────────── meal ideas ─────────────────────────
 
-const ideaSchema = z.object({
-  slug: z.string().min(1).max(60),
-  kind: z.enum(IDEA_KINDS),
-  size: z.enum(SIZES),
-  clientRef: z.uuid(),
-});
+async function readPrefs(userId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase.from("profiles").select("preferences").eq("user_id", userId).maybeSingle();
+  return { supabase, prefs: (data?.preferences as Record<string, unknown> | null) ?? {} };
+}
 
-const IDEA_MEAL: Record<(typeof IDEA_KINDS)[number], MealType | null> = {
-  breakfast: "breakfast",
-  lunch: "lunch",
-  dinner: "dinner",
-  snack: "snack",
-  sweet: "nibble",
-  protein: null,
-};
+async function writePlanned(userId: string, change: (list: PlannedIdea[]) => PlannedIdea[]): Promise<{ ok: boolean; planned: PlannedIdea[] }> {
+  const { supabase, prefs } = await readPrefs(userId);
+  const planned = change(plannedOf(prefs.planned_ideas, localDay(new Date()).date)).slice(0, 10);
+  const { error } = await supabase.from("profiles").update({ preferences: { ...prefs, planned_ideas: planned } }).eq("user_id", userId);
+  if (error) console.error("planned ideas failed", error.message);
+  revalidatePath("/progress");
+  return { ok: !error, planned };
+}
+
+const planSchema = z.object({ slug: z.string().min(1).max(60), kcal: z.number().int().min(80).max(900) });
+
+/** "בחרתי את המנה": kept aside as something to maybe eat today. Not counted. */
+export async function planIdea(input: z.input<typeof planSchema>): Promise<{ ok: boolean; planned: PlannedIdea[] }> {
+  const parsed = planSchema.safeParse(input);
+  if (!parsed.success || !mealBySlug(parsed.data.slug)) return { ok: false, planned: [] };
+  const user = await requireUser();
+  const { date } = localDay(new Date());
+  return writePlanned(user.id, (list) => [{ id: crypto.randomUUID(), slug: parsed.data.slug, kcal: parsed.data.kcal, date }, ...list.filter((x) => x.slug !== parsed.data.slug)]);
+}
+
+/** "לא אכלתי, להסיר". */
+export async function removePlanned(id: string): Promise<{ ok: boolean; planned: PlannedIdea[] }> {
+  if (!z.uuid().safeParse(id).success) return { ok: false, planned: [] };
+  const user = await requireUser();
+  return writePlanned(user.id, (list) => list.filter((x) => x.id !== id));
+}
+
+const eatSchema = z.object({ id: z.uuid(), mealType: z.enum(MEAL_TYPES), clientRef: z.uuid() });
 
 /**
- * "אכלתי את זה": only now does an idea count. The portions are worked out again here, from the
- * same meal and the same numbers the user saw, so the browser cannot send other numbers.
+ * "אכלתי את המנה": only now does the dish count. Its portions are worked out again here, from the
+ * same dish and calories the user saw, so the browser cannot send other numbers.
  */
-export async function eatIdea(input: z.input<typeof ideaSchema>): Promise<{ ok: boolean }> {
-  const parsed = ideaSchema.safeParse(input);
+export async function eatPlanned(input: z.input<typeof eatSchema>): Promise<{ ok: boolean }> {
+  const parsed = eatSchema.safeParse(input);
   if (!parsed.success) return { ok: false };
   const user = await requireUser();
   const ctx = await loadDayContext(user.id);
-  const { date, minutes } = localDay(new Date());
-  const day = await loadFoodDay(user.id, date).catch(() => null);
-  const eaten = day?.totals.kcal ? Math.round((day.totals.kcal[0] + day.totals.kcal[1]) / 2) : 0;
-  const idea = ideaBySlug(parsed.data.slug, {
-    kind: parsed.data.kind,
-    target: ctx.target,
-    eatenKcal: eaten,
-    proteinTarget: ctx.protein,
-    eatenProtein: day?.totals.protein ?? 0,
-    profile: ctx.profile,
-    taste: ctx.taste,
-    minutes,
-  });
-  if (!idea) return { ok: false };
-  const meal = idea.sizes[parsed.data.size];
-  const mealType = IDEA_MEAL[parsed.data.kind] ?? (minutes < 11 * 60 ? "breakfast" : minutes < 16 * 60 ? "lunch" : "dinner");
-  return addMeal({ text: meal.title, mealType, clientRef: parsed.data.clientRef, items: ideaItems(meal, ctx.showNumbers), estimated: false });
-}
-
-const slug = z.string().min(1).max(60);
-
-/** "שמירה כרעיון": kept in the profile, not counted. At most 20, the newest first. */
-export async function toggleSavedIdea(ideaSlug: string, save: boolean): Promise<{ ok: boolean; saved: string[] }> {
-  if (!slug.safeParse(ideaSlug).success) return { ok: false, saved: [] };
-  const user = await requireUser();
-  const supabase = await createClient();
-  const { data } = await supabase.from("profiles").select("preferences").eq("user_id", user.id).maybeSingle();
-  const prefs = ((data?.preferences as Record<string, unknown> | null) ?? {}) as { saved_ideas?: unknown };
-  const before = Array.isArray(prefs.saved_ideas) ? prefs.saved_ideas.filter((x): x is string => typeof x === "string") : [];
-  const saved = (save ? [ideaSlug, ...before.filter((x) => x !== ideaSlug)] : before.filter((x) => x !== ideaSlug)).slice(0, 20);
-  const { error } = await supabase.from("profiles").update({ preferences: { ...prefs, saved_ideas: saved } }).eq("user_id", user.id);
-  revalidatePath("/progress");
-  return { ok: !error, saved };
+  const p = ctx.planned.find((x) => x.id === parsed.data.id);
+  const idea = p ? ideaBySlug(p.slug, p.kcal, ctx.profile, ctx.taste) : null;
+  if (!p || !idea) return { ok: false };
+  const added = await addMeal({ text: idea.title, mealType: parsed.data.mealType, clientRef: parsed.data.clientRef, items: ideaItems(idea.meal, ctx.showNumbers), estimated: false });
+  if (added.ok) await writePlanned(user.id, (list) => list.filter((x) => x.id !== p.id));
+  return { ok: added.ok };
 }
 
 // ───────────────────────── taste ─────────────────────────
@@ -226,8 +202,7 @@ export async function saveTaste(input: z.input<typeof tasteSchema>): Promise<{ o
   const supabase = await createClient();
   const t = parsed.data;
   const allergies = t.allergies.filter((a) => (ALLERGENS as readonly string[]).includes(a));
-  const { data } = await supabase.from("profiles").select("preferences").eq("user_id", user.id).maybeSingle();
-  const prefs = (data?.preferences as Record<string, unknown> | null) ?? {};
+  const { prefs } = await readPrefs(user.id);
   const [food, profile] = await Promise.all([
     supabase.from("food_preferences").upsert({ user_id: user.id, likes: t.likes, dislikes: t.dislikes, allergies }),
     supabase.from("profiles").update({ preferences: { ...prefs, never_eat: t.never } }).eq("user_id", user.id),

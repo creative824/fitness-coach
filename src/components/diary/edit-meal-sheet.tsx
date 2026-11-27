@@ -3,7 +3,7 @@
 import { Check, Loader2, Trash2 } from "lucide-react";
 import { useState, useTransition } from "react";
 import { deleteMeal, updateMeal } from "@/lib/food/diary-actions";
-import { MEAL_LABEL, MEAL_TYPES, type MealType } from "@/lib/food/items";
+import { DIARY_MEALS, groupOf, MEAL_LABEL, type MealType } from "@/lib/food/items";
 import type { DiaryMeal } from "@/lib/food/diary";
 import { ItemRows, MealTotals, useMealItems } from "./items";
 import { Sheet } from "./sheet";
@@ -11,7 +11,7 @@ import { Sheet } from "./sheet";
 /** Tapping a meal card: change the meal, the amounts, remove a food, or delete the meal. */
 /** Mounted per meal (keyed by its id). */
 export function EditMealSheet({ meal, onClose, onDone, showNumbers }: { meal: DiaryMeal; onClose: () => void; onDone: (msg: string) => void; showNumbers: boolean }) {
-  const [type, setType] = useState<MealType>(meal.mealType ?? "other");
+  const [type, setType] = useState<MealType>(groupOf(meal.mealType ?? "other"));
   const items = useMealItems(meal.items);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -22,7 +22,7 @@ export function EditMealSheet({ meal, onClose, onDone, showNumbers }: { meal: Di
       const r = items.items.length
         ? await updateMeal({ id: meal.id, mealType: type, items: items.items }).catch(() => ({ ok: false }))
         : await deleteMeal(meal.id).catch(() => ({ ok: false }));
-      if (r.ok) onDone(items.items.length ? "הארוחה עודכנה." : "הארוחה נמחקה.");
+      if (r.ok) onDone(items.items.length ? "המנה עודכנה." : "המנה נמחקה.");
       else setNote("השמירה לא הצליחה. נסו שוב בעוד רגע.");
     });
   }
@@ -30,7 +30,7 @@ export function EditMealSheet({ meal, onClose, onDone, showNumbers }: { meal: Di
   function remove() {
     start(async () => {
       const r = await deleteMeal(meal.id).catch(() => ({ ok: false }));
-      if (r.ok) onDone("הארוחה נמחקה.");
+      if (r.ok) onDone("המנה נמחקה.");
       else setNote("המחיקה לא הצליחה. נסו שוב בעוד רגע.");
     });
   }
@@ -39,7 +39,7 @@ export function EditMealSheet({ meal, onClose, onDone, showNumbers }: { meal: Di
     <Sheet
       open
       onClose={onClose}
-      title="עריכת ארוחה"
+      title="עריכת מנה"
       footer={
         <div className="flex gap-2">
           <button
@@ -66,7 +66,7 @@ export function EditMealSheet({ meal, onClose, onDone, showNumbers }: { meal: Di
       <p className="text-sm text-ink-muted">{meal.text}</p>
       <fieldset className="flex flex-wrap gap-1.5">
         <legend className="sr-only">איזו ארוחה</legend>
-        {MEAL_TYPES.map((m) => (
+        {DIARY_MEALS.map((m) => (
           <button
             key={m}
             type="button"

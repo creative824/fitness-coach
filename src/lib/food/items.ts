@@ -17,6 +17,11 @@ export const MEAL_LABEL: Record<MealType, string> = {
   nibble: "נשנוש",
   other: "ארוחה אחרת",
 };
+/** The four kinds the user picks from when adding a dish. Older entries may hold the others. */
+export const DIARY_MEALS = ["breakfast", "lunch", "dinner", "snack"] as const satisfies readonly MealType[];
+export const MEAL_EMOJI: Record<MealType, string> = { breakfast: "🍳", lunch: "🍲", dinner: "🥗", snack: "🍎", nibble: "🍎", other: "🍽️" };
+/** The diary group a saved dish shows under: the meal type the user chose. */
+export const groupOf = (m: MealType | null): (typeof DIARY_MEALS)[number] => (m === null || m === "nibble" ? "snack" : m === "other" ? "dinner" : m);
 export const CONFIDENCE_LABEL = { low: "ודאות נמוכה", medium: "ודאות בינונית", high: "ודאות גבוהה" } as const;
 export type Confidence = keyof typeof CONFIDENCE_LABEL;
 

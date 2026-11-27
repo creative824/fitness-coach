@@ -1,4 +1,5 @@
 import "server-only";
+import { asksFor, type Ask } from "./asks";
 import { estimateMeal } from "./estimate";
 import { foldSalad } from "./diary";
 import type { FoodItem } from "./items";
@@ -8,6 +9,8 @@ export interface Analysis {
   items: FoodItem[];
   /** One question worth asking (an amount the count depends on), or null. */
   question: string | null;
+  /** Focused one-tap questions about the database count (the size of a spoon, thick or thin slices). */
+  asks: Ask[];
   /** Words neither the food database nor the AI could count. */
   unknown: string[];
   notFood: boolean;
@@ -52,8 +55,9 @@ export function complexity(text: string, local: ParseResult): Complexity {
  */
 export async function analyzeText(text: string, allowAi: () => Promise<boolean>): Promise<Analysis> {
   const local = parseFood(text);
-  const items = foldSalad(text, local.items).map(toFoodItem);
-  const base: Analysis = { items, question: null, unknown: local.unknown, notFood: !items.length && !local.unknown.length, usedAi: false, aiProblem: null };
+  const folded = foldSalad(text, local.items);
+  const items = folded.map(toFoodItem);
+  const base: Analysis = { items, question: null, asks: asksFor(folded), unknown: local.unknown, notFood: !items.length && !local.unknown.length, usedAi: false, aiProblem: null };
   const c = complexity(text, local);
   if (!c.complex) return base;
   if (!process.env.GEMINI_API_KEY) return { ...base, aiProblem: local.unknown.length ? "no_key" : null };
@@ -64,7 +68,7 @@ export async function analyzeText(text: string, allowAi: () => Promise<boolean>)
   const onlyWords = c.reason === "unknown" && items.length > 0 && !COMPLEX_WORDS.test(text) && !local.items.some((i) => i.confidence === "low");
   const ai = await estimateMeal(onlyWords ? local.unknown.join(", ") : text);
   if (ai.ok) {
-    return { items: onlyWords ? [...items, ...ai.items] : ai.items, question: ai.question, unknown: [], notFood: false, usedAi: true, aiProblem: null };
+    return { items: onlyWords ? [...items, ...ai.items] : ai.items, question: ai.question, asks: onlyWords ? base.asks : [], unknown: [], notFood: false, usedAi: true, aiProblem: null };
   }
   if (ai.reason === "not_food") return { ...base, unknown: items.length ? [] : local.unknown, notFood: !items.length, usedAi: true };
   return { ...base, aiProblem: local.unknown.length ? ai.reason : null };

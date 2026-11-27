@@ -2,6 +2,7 @@ import "server-only";
 import { cache } from "react";
 import type { DietProfile } from "@/lib/menu/engine";
 import type { Taste } from "@/lib/food/prefs";
+import { plannedOf, type PlannedIdea } from "@/lib/food/ideas";
 import { loadOnboarding } from "@/lib/onboarding/data";
 import type { OnboardingDraft } from "@/lib/onboarding/schema";
 import { proteinTarget } from "@/lib/day/scores";
@@ -23,10 +24,10 @@ export interface DayContext {
   /** The calories the menu is built for: the target, or a neutral size without one. */
   menuKcal: number;
   profile: DietProfile;
-  /** What the user likes, does not like and does not eat (meal ideas, menu). */
+  /** What the user likes, does not like and does not eat (meal ideas). */
   taste: Taste;
-  /** Meal ideas the user saved for later ("שמירה כרעיון"), newest first. */
-  savedIdeas: string[];
+  /** Dishes the user picked from the ideas today, not eaten yet (never counted). */
+  planned: PlannedIdea[];
   mealsPerDay: number | null;
   /** Calories the user set by hand per meal of the day (null: the usual share). */
   slotKcal: (number | null)[] | null;
@@ -82,9 +83,8 @@ export const loadDayContext = cache(async (userId: string): Promise<DayContext> 
   }
   const kcal = cal?.kcal ?? FALLBACK_KCAL;
   if (!cal) targetKind = "placeholder";
-  const prefs = (profile as { calorie_tracking?: boolean; preferences?: { slot_kcal?: unknown; saved_ideas?: unknown } } | null) ?? null;
-  const rawIdeas = prefs?.preferences?.saved_ideas;
-  const savedIdeas = Array.isArray(rawIdeas) ? rawIdeas.filter((x): x is string => typeof x === "string").slice(0, 20) : [];
+  const prefs = (profile as { calorie_tracking?: boolean; preferences?: { slot_kcal?: unknown; planned_ideas?: unknown } } | null) ?? null;
+  const planned = plannedOf(prefs?.preferences?.planned_ideas, input.today);
   const tracking = prefs?.calorie_tracking !== false;
   const rawSlots = prefs?.preferences?.slot_kcal;
   const slotKcal = Array.isArray(rawSlots) ? rawSlots.map((x) => (typeof x === "number" ? x : null)) : null;
@@ -96,7 +96,7 @@ export const loadDayContext = cache(async (userId: string): Promise<DayContext> 
     menuKcal: kcal,
     profile: { pattern: d.dietary_pattern, allergies: d.allergies, avoid: [...d.dislikes, ...d.never_eat, ...d.sensitivities] },
     taste: { likes: d.likes, dislikes: d.dislikes, never: d.never_eat },
-    savedIdeas,
+    planned,
     mealsPerDay: d.meals_per_day,
     slotKcal,
     showNumbers: tracking && !hideNumbers,

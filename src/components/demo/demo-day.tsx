@@ -10,7 +10,6 @@ import type { Understanding } from "@/lib/food/recipe";
 import { DayProvider, useDay } from "@/components/home/day-context";
 import { FitnessCard, type SmallTask } from "@/components/home/fitness-card";
 import { TodayWorkout } from "@/components/workout/today-workout";
-import { MenuCard, type MenuApi } from "@/components/home/menu-card";
 import { DayExtras } from "@/components/home/day-extras";
 import { DaySummary } from "@/components/home/day-summary";
 import { AvatarEditor } from "@/components/ui/avatar-editor";
@@ -21,9 +20,7 @@ import { proteinTarget } from "@/lib/day/scores";
 import { smartTasks, type SmartTaskInput } from "@/lib/day/smart-tasks";
 import { totalsOf, type FoodItem } from "@/lib/food/items";
 import { describeItem } from "@/lib/food/parse";
-import { buildMenu, chooseSlot, renderSlot, reshuffle, slotKcal, swapSlot, type DayMenu, type DietProfile } from "@/lib/menu/engine";
-import { toView } from "@/lib/menu/view";
-import type { MenuResult } from "@/lib/menu/actions";
+import type { DietProfile } from "@/lib/menu/engine";
 import type { GoalType } from "@/lib/onboarding/schema";
 import { PER_SIDE } from "@/lib/plan/duration";
 import { filterExercises } from "@/lib/plan/candidates";
@@ -88,7 +85,6 @@ function setupFor(p: Person) {
   const safety = screenSafety({ answers: {}, goals: p.goals, height_cm: p.heightCm, weight_kg: p.weightKg, target_weight_kg: null });
   const cal = calorieTarget({ age: p.age, heightCm: p.heightCm, weightKg: p.weightKg, sex: p.sex, activityLevel: p.activityLevel, goals: p.goals, experience: p.experience, availableDays: [0, 2, 4], safety });
   const target = cal?.kcal ?? 2000;
-  const menu = buildMenu({ target, mealsPerDay: p.mealsPerDay, profile: p.diet, seed: p.id.length * 977 + 13 });
   // The sample person's exercise pool, filtered the same way as a real user's.
   const rows = filterExercises(
     EXERCISES.map((e) => ({ id: e.slug, slug: e.slug, name_he: e.name_he, category: e.category, mode: e.mode, difficulty: e.difficulty, equipment: e.equipment, primary_muscles: e.primary, contraindications: e.contraindications })),
@@ -114,7 +110,7 @@ function setupFor(p: Person) {
     lowIntensityOnly: false, needsDoctor: false, hideNumbers: false, workoutToday: true, weeksIn: 0,
     date: `2026-01-${10 + p.id.length}`, proteinTarget: proteinTarget(p.goals, p.weightKg, { heightCm: p.heightCm, activityLevel: p.activityLevel }),
   }).map((t) => ({ id: t.id, kind: t.kind, title: t.title, why: t.why, minutes: t.minutes, grams: t.grams, auto: false }));
-  return { target, menu, tasks, weight: sampleWeights(p), protein: proteinTarget(p.goals, p.weightKg, { heightCm: p.heightCm, activityLevel: p.activityLevel }), workout, pool, cards };
+  return { target, tasks, weight: sampleWeights(p), protein: proteinTarget(p.goals, p.weightKg, { heightCm: p.heightCm, activityLevel: p.activityLevel }), workout, pool, cards };
 }
 
 export function DemoDay() {
@@ -202,65 +198,17 @@ function sampleWeights(p: Person) {
   return { history, startKg: history[0].kg, heightCm: p.heightCm, today: "2026-01-15" };
 }
 
-const ok = (menu: DayMenu, profile: DietProfile, eaten: { kcal: number; protein: number }): MenuResult => ({
-  ok: true,
-  menu: toView(menu, profile),
-  eatenKcal: eaten.kcal,
-  eatenProtein: eaten.protein,
-});
-
 function PersonDay({ person, avatar }: { person: Person; avatar: AvatarConfig }) {
   const [setup] = useState(() => setupFor(person));
-  const menuRef = useRef(setup.menu);
-  /** Food logged outside the menu (the diary and "on top of the menu"). */
+  /** Food added in the demo diary. */
   const extraRef = useRef({ kcal: 0, protein: 0 });
-  /** Protein of meals eaten "instead" of a menu meal, by slot. */
-  const insteadProtein = useRef(new Map<number, number>());
-
-  const eaten = () => {
-    const slots = menuRef.current.slots;
-    const kcal = slots.reduce((a, s) => a + (s.eaten ? slotKcal(s) : 0), 0) + extraRef.current.kcal;
-    const protein = slots.reduce((a, s, i) => a + (!s.eaten ? 0 : s.eaten.custom ? (insteadProtein.current.get(i) ?? 0) : (renderSlot(s)?.protein ?? 0)), 0) + extraRef.current.protein;
-    return { kcal, protein: Math.round(protein) };
-  };
-  const done = (m: DayMenu) => {
-    menuRef.current = m;
-    return Promise.resolve(ok(m, person.diet, eaten()));
-  };
-  const api: MenuApi = {
-    eat: (i, yes) => done({ ...menuRef.current, slots: menuRef.current.slots.map((s, k) => (k === i ? { ...s, eaten: yes ? { logId: `demo-${i}` } : null } : s)) }),
-    swap: (i) => done(swapSlot(menuRef.current, i, person.diet)),
-    swapAll: () =>
-      done(reshuffle(menuRef.current, { target: menuRef.current.target, mealsPerDay: person.mealsPerDay, profile: person.diet, custom: menuRef.current.custom }, Math.floor(Math.random() * 2 ** 31))),
-    choose: (i, slug) => done(chooseSlot(menuRef.current, i, slug, person.diet)),
-    setKcal: (i, kcal) => {
-      const n = menuRef.current.slots.length;
-      const list = Array.from({ length: n }, (_, k) => menuRef.current.custom?.[k] ?? null);
-      list[i] = kcal;
-      if (list.every((x) => x !== null)) return Promise.resolve({ ok: false });
-      return done(reshuffle(menuRef.current, { target: menuRef.current.target, mealsPerDay: person.mealsPerDay, profile: person.diet, custom: list }, menuRef.current.seed));
-    },
-    other: (input) => {
-      const t = totalsOf(input.items as FoodItem[]);
-      const kcal = t.kcal ? Math.round((t.kcal[0] + t.kcal[1]) / 2) : null;
-      if (input.slot === null) {
-        extraRef.current = { kcal: extraRef.current.kcal + (kcal ?? 0), protein: extraRef.current.protein + (t.protein ?? 0) };
-        return done(menuRef.current);
-      }
-      insteadProtein.current.set(input.slot, t.protein ?? 0);
-      return done({
-        ...menuRef.current,
-        slots: menuRef.current.slots.map((s, k) => (k === input.slot ? { ...s, eaten: { logId: "demo", custom: { text: input.text.slice(0, 120), kcal } } } : s)),
-      });
-    },
-  };
+  const eaten = () => ({ kcal: extraRef.current.kcal, protein: Math.round(extraRef.current.protein) });
 
   return (
     <DayProvider eatenKcal={0} workout={{ done: 0, total: setup.workout.items.length }} activeMinutes={0}>
       <DemoCompetition you={person.label} avatar={avatar} />
       <DaySummary target={setup.target} proteinTarget={setup.protein} minutes={12 * 60} trackHref={null} />
       <DayExtras water={null} weight={setup.weight} localWeight />
-      <MenuCard initial={toView(setup.menu, person.diet)} showNumbers saved aiEnabled={false} api={api} recipes={{ understand: demoUnderstand, save: demoSave }} />
       <TodayWorkout
         initial={{ minutes: setup.workout.minutes, items: setup.workout.items }}
         title={setup.workout.title}

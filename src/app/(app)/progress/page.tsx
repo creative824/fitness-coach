@@ -12,8 +12,6 @@ import { loadScores, type SavedScore } from "@/lib/day/score-data";
 import { DAILY_WEIGHTS, type DailyPart } from "@/lib/day/scores";
 import { requireUser } from "@/lib/data/user";
 import { loadFoodDay, loadFoodRange } from "@/lib/food/data";
-import { mealTypeAt } from "@/lib/food/items";
-import { loadRecentMeals, type RecentMeal } from "@/lib/food/recent";
 import { ACTIVITIES, type ActivityKind } from "@/lib/fitness/activities";
 import { getDictionary } from "@/lib/i18n/he";
 import { loadDayLogRange } from "@/lib/menu/data";
@@ -73,7 +71,7 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
   const askedDay = typeof sp.d === "string" && DATE.test(sp.d) && sp.d <= today ? sp.d : today;
   const [from, to] = rangeOf(range, today, back, askedDay);
 
-  const [ctx, p, food, logs, workouts, foodDay, scores, recent] = await Promise.all([
+  const [ctx, p, food, logs, workouts, foodDay, scores] = await Promise.all([
     loadDayContext(user.id),
     loadProgress(user.id, today),
     loadFoodRange(user.id, from, to).catch(() => ({ tracking: true, days: {} as Awaited<ReturnType<typeof loadFoodRange>>["days"] })),
@@ -81,7 +79,6 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
     loadWorkoutDays(user.id, from, to),
     range === "day" ? loadFoodDay(user.id, askedDay).catch(() => null) : Promise.resolve(null),
     loadScores(user.id, from, to).catch(() => new Map<string, SavedScore>()),
-    range === "day" && askedDay === today ? loadRecentMeals(user.id, today).catch((): RecentMeal[] => []) : Promise.resolve([] as RecentMeal[]),
   ]);
   const target = ctx.showNumbers ? ctx.target : null;
   const protein = ctx.protein;
@@ -117,11 +114,9 @@ async function Progress({ searchParams }: { searchParams: PageProps<"/progress">
           tracking={ctx.showNumbers}
           score={askedDay < today ? (scores.get(askedDay) ?? null) : null}
           diary={{
-            defaultMeal: mealTypeAt(minutes),
-            recent,
             ideaContext: { target, proteinTarget: protein, profile: ctx.profile, taste: ctx.taste, minutes },
-            savedIdeas: ctx.savedIdeas,
-            photoEnabled: Boolean(process.env.GEMINI_API_KEY),
+            planned: ctx.planned,
+            open: sp.open === "add" || sp.open === "idea" ? sp.open : null,
           }}
         />
       ) : (
@@ -191,7 +186,7 @@ function DayView({
   today: string;
   target: number | null;
   protein: number | null;
-  diary: Pick<FoodDayProps, "defaultMeal" | "recent" | "ideaContext" | "savedIdeas" | "photoEnabled">;
+  diary: Pick<FoodDayProps, "ideaContext" | "planned" | "open">;
   workout: "done" | "partial" | "planned" | null;
   acts: { kind: string; min: number }[];
   foodDay: Awaited<ReturnType<typeof loadFoodDay>> | null;
